@@ -175,14 +175,20 @@ void ApiClient::Generate(int count,
                           int bars,
                           const std::string& hint,
                           bool variety,
+                          float swing,
+                          int velocity_variance,
+                          float timing_variance,
                           GenerateCallback callback)
 {
     std::thread([=, this]() {
         try {
             json req;
-            req["count"]   = count;
-            req["bars"]    = bars;
-            req["variety"] = variety;
+            req["count"]             = count;
+            req["bars"]              = bars;
+            req["variety"]           = variety;
+            req["swing"]             = swing;
+            req["velocity_variance"] = velocity_variance;
+            req["timing_variance"]   = timing_variance;
             if (!phrase_type.empty()) req["phrase_type"] = phrase_type;
             if (!key.empty())         req["key"]         = key;
             if (!mode.empty())        req["mode"]        = mode;

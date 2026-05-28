@@ -30,6 +30,7 @@ public:
   void Generate(int count, const std::string& phrase_type,
                 const std::string& key, const std::string& mode,
                 int bars, const std::string& hint, bool variety,
+                float swing, int velocity_variance, float timing_variance,
                 GenerateCallback callback);
 
   // GET /api/library — synchronous for simplicity

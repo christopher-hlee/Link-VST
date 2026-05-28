@@ -89,7 +89,8 @@ cmake --build build --config Release
 - [x] MIDI preview playback — FluidSynth renders WAV server-side; plugin plays via `ProcessBlock`; web UI via fetch + Web Audio
 - [x] Library browser panel — search, type/key filter, drag-out, play, delete
 - [x] Web UI — full single-page app at `/linkvst/` (generate, upload, preview, library)
-- [ ] Style presets (e.g. "jazz", "lo-fi", "cinematic")
-- [ ] Export all library as zip
-- [ ] Humanization controls (swing, velocity variance)
-- [ ] Plugin UI: key/type filter dropdowns on generate panel
+- [x] Style presets — 9 built-in styles (Jazz, Lo-fi, Cinematic, Dark Ambient, Pop, Blues, Funk, Dream Arp, Classical)
+- [x] Export all library as zip — `GET /api/library/export`
+- [x] Humanization — swing, velocity variance, timing jitter (server + web UI + plugin sliders)
+- [x] Variation — `POST /api/generate/variation/{id}` uses original as few-shot exemplar
+- [x] Plugin UI dropdowns — Type, Key, Mode, Bars, Count; Swing + VelVar sliders

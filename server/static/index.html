@@ -5,221 +5,290 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LinkVST</title>
 <style>
-  :root {
-    --bg:      #0d0e1a;
-    --surface: #141526;
-    --card:    #1a1b2e;
-    --border:  #2a2b45;
-    --purple:  #7c3aed;
-    --purple-light: #a78bfa;
-    --green:   #22c55e;
-    --red:     #ef4444;
-    --text:    #e2e8f0;
-    --muted:   #64748b;
-    --mono:    'Fira Mono', 'Consolas', monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+:root {
+  --bg:       #0d0e1a;
+  --surface:  #141526;
+  --card:     #1a1b2e;
+  --card-h:   #1f2038;
+  --border:   #252640;
+  --border-h: #3a3b60;
+  --purple:   #7c3aed;
+  --purple-l: #a78bfa;
+  --purple-d: #4c1d95;
+  --green:    #22c55e;
+  --green-d:  #15803d;
+  --red:      #ef4444;
+  --amber:    #f59e0b;
+  --text:     #e2e8f0;
+  --muted:    #64748b;
+  --mono:     'Fira Mono','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh}
 
-  /* ---- Layout ---- */
-  .header { display: flex; align-items: center; justify-content: space-between;
-            padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
-  .logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; color: var(--purple-light); }
-  .logo span { color: var(--muted); font-weight: 400; }
-  .header-right { display: flex; align-items: center; gap: 12px; }
-  .profile-badge { font-size: 0.75rem; color: var(--muted); background: var(--card);
-                   border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; }
-  .profile-badge strong { color: var(--purple-light); }
+/* Layout */
+.header{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);
+  position:sticky;top:0;z-index:50}
+.logo{font-size:1.1rem;font-weight:700;letter-spacing:1px;color:var(--purple-l)}
+.logo span{color:var(--muted);font-weight:400;font-size:.9rem}
+.profile-badge{font-size:.72rem;color:var(--muted);background:var(--card);
+  border:1px solid var(--border);border-radius:20px;padding:4px 14px;cursor:default}
+.profile-badge strong{color:var(--purple-l)}
 
-  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+main{max-width:1200px;margin:0 auto;padding:20px 24px}
 
-  /* ---- Controls ---- */
-  .controls { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-              padding: 18px 20px; margin-bottom: 24px; }
-  .controls-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-  .ctrl { display: flex; flex-direction: column; gap: 4px; }
-  .ctrl label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-  select, input[type=text] {
-    background: var(--card); border: 1px solid var(--border); color: var(--text);
-    border-radius: 6px; padding: 7px 10px; font-size: 0.85rem; outline: none; }
-  select:focus, input[type=text]:focus { border-color: var(--purple); }
-  input[type=text] { width: 200px; }
-  .hint-ctrl { flex: 1; min-width: 160px; }
-  .hint-ctrl input { width: 100%; }
+/* Preset bar */
+.preset-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+.preset-bar label{font-size:.72rem;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);white-space:nowrap}
+.preset-scroll{display:flex;gap:8px;overflow-x:auto;flex:1;padding-bottom:2px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.preset-btn{flex-shrink:0;padding:5px 14px;border-radius:20px;border:1px solid var(--border);
+  background:var(--card);color:var(--muted);font-size:.8rem;cursor:pointer;white-space:nowrap;
+  transition:all .15s}
+.preset-btn:hover{border-color:var(--purple);color:var(--purple-l)}
+.preset-btn.active{background:var(--purple-d);border-color:var(--purple);color:#fff}
 
-  .btn { padding: 9px 20px; border-radius: 6px; border: none; cursor: pointer;
-         font-size: 0.875rem; font-weight: 600; transition: filter .15s; }
-  .btn:hover { filter: brightness(1.15); }
-  .btn:active { filter: brightness(0.9); }
-  .btn-primary { background: var(--purple); color: #fff; }
-  .btn-outline { background: transparent; color: var(--purple-light);
-                 border: 1px solid var(--purple); }
-  .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
-  .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
-  .btn-green  { background: var(--green); color: #000; }
-  .btn-icon { background: transparent; border: none; cursor: pointer; color: var(--muted);
-              font-size: 1rem; padding: 4px 8px; border-radius: 4px; transition: color .15s; }
-  .btn-icon:hover { color: var(--text); }
+/* Controls */
+.controls{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;margin-bottom:10px}
+.ctrl-row{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
+.ctrl{display:flex;flex-direction:column;gap:4px}
+.ctrl label{font-size:.68rem;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+select,input[type=text]{background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:5px;padding:6px 10px;font-size:.82rem;outline:none;transition:border-color .15s}
+select:focus,input[type=text]:focus{border-color:var(--purple)}
+.hint-ctrl{flex:1;min-width:160px}
+.hint-ctrl input{width:100%}
 
-  /* ---- Section header ---- */
-  .section-header { display: flex; align-items: center; justify-content: space-between;
-                    margin-bottom: 14px; }
-  .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+/* Humanize section */
+.humanize{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:10px 16px;margin-bottom:10px}
+.humanize-toggle{display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;user-select:none;font-size:.72rem;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--muted)}
+.humanize-toggle .chevron{transition:transform .2s;font-size:.6rem}
+.humanize-toggle.open .chevron{transform:rotate(90deg)}
+.humanize-controls{display:flex;flex-wrap:wrap;gap:18px;margin-top:12px;display:none}
+.humanize-controls.show{display:flex}
+.hctrl{display:flex;align-items:center;gap:8px;flex:1;min-width:180px}
+.hctrl label{font-size:.72rem;color:var(--muted);white-space:nowrap;width:80px}
+input[type=range]{flex:1;accent-color:var(--purple);height:4px;cursor:pointer}
+.hval{font-size:.75rem;font-family:var(--mono);color:var(--purple-l);width:36px;text-align:right}
 
-  /* ---- Generated cards ---- */
-  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-bottom: 32px; }
-  .phrase-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-                 padding: 16px; display: flex; flex-direction: column; gap: 10px;
-                 transition: border-color .2s; }
-  .phrase-card:hover { border-color: var(--purple); }
-  .phrase-card.playing { border-color: var(--green); box-shadow: 0 0 0 1px var(--green)22; }
+/* Buttons */
+.btn{padding:8px 18px;border-radius:5px;border:none;cursor:pointer;
+  font-size:.84rem;font-weight:600;transition:filter .15s}
+.btn:hover{filter:brightness(1.15)}
+.btn:active{filter:brightness(.9)}
+.btn:disabled{opacity:.5;cursor:default;filter:none}
+.btn-primary{background:var(--purple);color:#fff}
+.btn-outline{background:transparent;color:var(--purple-l);border:1px solid var(--purple)}
+.btn-sm{padding:4px 11px;font-size:.76rem}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--border-h);color:var(--text);filter:none}
+.btn-danger{background:transparent;color:var(--red);border:1px solid var(--red)}
+.btn-green{background:var(--green);color:#000}
+.btn-amber{background:var(--amber);color:#000}
+.btn-icon{background:transparent;border:none;cursor:pointer;color:var(--muted);
+  font-size:.9rem;padding:3px 6px;border-radius:3px;transition:color .15s}
+.btn-icon:hover{color:var(--text)}
 
-  .card-type { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px;
-               background: var(--purple)33; color: var(--purple-light); border-radius: 4px;
-               padding: 2px 8px; display: inline-block; }
-  .card-key  { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--text); }
-  .card-meta { font-size: 0.78rem; color: var(--muted); }
-  .card-desc { font-size: 0.78rem; color: var(--muted); font-style: italic; line-height: 1.4;
-               flex: 1; }
-  .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Status */
+.status{font-size:.8rem;color:var(--muted);min-height:22px;padding:2px 0 8px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);
+  border-top-color:var(--purple);border-radius:50%;
+  animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ---- Upload zone ---- */
-  .upload-zone { border: 2px dashed var(--border); border-radius: 10px;
-                 padding: 28px; text-align: center; cursor: pointer; transition: border-color .2s;
-                 color: var(--muted); font-size: 0.875rem; margin-bottom: 32px; }
-  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--purple); color: var(--purple-light); }
-  .upload-zone input { display: none; }
+/* Section header */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.section-title{font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
 
-  /* ---- Library ---- */
-  .library-header { cursor: pointer; user-select: none; }
-  .library-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .library-filters select, .library-filters input { font-size: 0.8rem; padding: 5px 8px; }
-  .library-search { flex: 1; min-width: 140px; }
+/* Cards */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:12px;margin-bottom:28px}
+.phrase-card{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:14px;display:flex;flex-direction:column;gap:8px;transition:border-color .2s}
+.phrase-card:hover{border-color:var(--border-h)}
+.phrase-card.playing{border-color:var(--green);box-shadow:0 0 12px #22c55e18}
+.card-header{display:flex;align-items:center;justify-content:space-between}
+.card-type{font-size:.66rem;text-transform:uppercase;letter-spacing:.4px;
+  background:var(--purple-d);color:var(--purple-l);border-radius:4px;padding:2px 8px}
+.card-key{font-family:var(--mono);font-size:1.05rem;font-weight:700;color:var(--text)}
+.card-key span{color:var(--muted);font-weight:400;font-size:.85rem}
+.card-meta{font-size:.76rem;color:var(--muted)}
+.card-desc{font-size:.76rem;color:var(--muted);font-style:italic;line-height:1.45;flex:1}
+.card-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 
-  .library-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-  .library-table th { text-align: left; color: var(--muted); font-size: 0.7rem; text-transform: uppercase;
-                      letter-spacing: 0.5px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
-  .library-table td { padding: 8px 10px; border-bottom: 1px solid var(--border)88; vertical-align: middle; }
-  .library-table tr:hover td { background: var(--surface); }
-  .lib-type { font-size: 0.65rem; text-transform: uppercase; background: var(--purple)22;
-              color: var(--purple-light); border-radius: 3px; padding: 1px 6px; }
-  .lib-key { font-family: var(--mono); font-weight: 600; }
-  .lib-actions { display: flex; gap: 4px; justify-content: flex-end; }
+/* Type badge colors */
+.type-chord{background:#3b0764;color:#c084fc}
+.type-melody{background:#0c3d60;color:#7dd3fc}
+.type-arpeggio{background:#064e3b;color:#6ee7b7}
+.type-bassline{background:#451a03;color:#fbbf24}
 
-  /* ---- Status / spinner ---- */
-  .status { font-size: 0.82rem; color: var(--muted); min-height: 20px; margin-bottom: 14px; }
-  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
-          border-top-color: var(--purple); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border);border-radius:8px;padding:22px;
+  text-align:center;cursor:pointer;color:var(--muted);font-size:.84rem;
+  transition:all .2s;margin-bottom:28px}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--purple);color:var(--purple-l)}
+.upload-zone input{display:none}
+#upload-status{margin-top:8px;font-size:.78rem;color:var(--purple-l)}
 
-  .empty { color: var(--muted); font-size: 0.85rem; padding: 20px; text-align: center; }
-  .collapsible { overflow: hidden; }
-  .collapsed { display: none; }
-  .chevron { transition: transform .2s; display: inline-block; }
-  .open .chevron { transform: rotate(90deg); }
+/* Library */
+.lib-header{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.lib-filters{display:flex;gap:8px;flex-wrap:wrap;flex:1}
+.lib-filters select,.lib-filters input{font-size:.78rem;padding:5px 8px}
+.lib-search{flex:1;min-width:130px}
+.lib-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.lib-table th{text-align:left;color:var(--muted);font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.5px;padding:5px 10px;border-bottom:1px solid var(--border)}
+.lib-table td{padding:7px 10px;border-bottom:1px solid #1a1b2e;vertical-align:middle}
+.lib-table tr:hover td{background:var(--surface)}
+.lib-key{font-family:var(--mono);font-weight:600}
+.lib-type{font-size:.63rem;text-transform:uppercase;border-radius:3px;padding:2px 6px}
+.lib-actions{display:flex;gap:3px;justify-content:flex-end}
+.empty{color:var(--muted);font-size:.84rem;padding:24px;text-align:center}
+.collapsible-body{display:none}
+.collapsible-body.show{display:block}
 </style>
 </head>
 <body>
 
 <header class="header">
   <div class="logo">⬡ LinkVST <span>/ MIDI taste engine</span></div>
-  <div class="header-right">
-    <div class="profile-badge" id="profile-badge">Loading profile…</div>
-  </div>
+  <div id="profile-badge" class="profile-badge">loading…</div>
 </header>
 
 <main>
 
-  <!-- Generate controls -->
-  <div class="controls">
-    <div class="controls-row">
-      <div class="ctrl">
-        <label>Count</label>
-        <select id="ctrl-count">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="4" selected>4</option>
-          <option value="8">8</option>
-        </select>
-      </div>
-      <div class="ctrl">
-        <label>Type</label>
-        <select id="ctrl-type">
-          <option value="">Any</option>
-          <option value="chord_progression">Chord Prog</option>
-          <option value="melody">Melody</option>
-          <option value="arpeggio">Arpeggio</option>
-          <option value="bassline">Bassline</option>
-        </select>
-      </div>
-      <div class="ctrl">
-        <label>Key</label>
-        <select id="ctrl-key">
-          <option value="">Any</option>
-          <option>C</option><option>C#</option><option>D</option><option>D#</option>
-          <option>E</option><option>F</option><option>F#</option><option>G</option>
-          <option>G#</option><option>A</option><option>A#</option><option>B</option>
-        </select>
-      </div>
-      <div class="ctrl">
-        <label>Mode</label>
-        <select id="ctrl-mode">
-          <option value="">Any</option>
-          <option>major</option><option>minor</option><option>dorian</option>
-          <option>phrygian</option><option>lydian</option><option>mixolydian</option><option>locrian</option>
-        </select>
-      </div>
-      <div class="ctrl">
-        <label>Bars</label>
-        <select id="ctrl-bars">
-          <option value="2">2</option>
-          <option value="4" selected>4</option>
-          <option value="8">8</option>
-          <option value="16">16</option>
-        </select>
-      </div>
-      <div class="ctrl hint-ctrl">
-        <label>Style hint</label>
-        <input type="text" id="ctrl-hint" placeholder="e.g. jazzy, lo-fi, dark…">
-      </div>
-      <div class="ctrl" style="justify-content:flex-end">
-        <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()">▶ Generate</button>
-      </div>
+<!-- Preset selector -->
+<div class="preset-bar">
+  <label>Style</label>
+  <div class="preset-scroll" id="preset-scroll">
+    <button class="preset-btn active" data-id="" onclick="selectPreset(this, null)">
+      🎲 Taste Profile
+    </button>
+  </div>
+</div>
+
+<!-- Generate controls -->
+<div class="controls">
+  <div class="ctrl-row">
+    <div class="ctrl">
+      <label>Count</label>
+      <select id="ctrl-count">
+        <option value="1">1</option><option value="2">2</option>
+        <option value="4" selected>4</option><option value="8">8</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Type</label>
+      <select id="ctrl-type">
+        <option value="">Any</option>
+        <option value="chord_progression">Chord Prog</option>
+        <option value="melody">Melody</option>
+        <option value="arpeggio">Arpeggio</option>
+        <option value="bassline">Bassline</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Key</label>
+      <select id="ctrl-key">
+        <option value="">Any</option>
+        <option>C</option><option>C#</option><option>D</option><option>D#</option>
+        <option>E</option><option>F</option><option>F#</option><option>G</option>
+        <option>G#</option><option>A</option><option>A#</option><option>B</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Mode</label>
+      <select id="ctrl-mode">
+        <option value="">Any</option>
+        <option>major</option><option>minor</option><option>dorian</option>
+        <option>phrygian</option><option>lydian</option><option>mixolydian</option><option>locrian</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Bars</label>
+      <select id="ctrl-bars">
+        <option value="2">2</option><option value="4" selected>4</option>
+        <option value="8">8</option><option value="16">16</option>
+      </select>
+    </div>
+    <div class="ctrl hint-ctrl">
+      <label>Style hint</label>
+      <input type="text" id="ctrl-hint" placeholder="e.g. jazzy, lo-fi, dark, modal…">
+    </div>
+    <div class="ctrl" style="justify-content:flex-end">
+      <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()">▶ Generate</button>
     </div>
   </div>
+</div>
 
-  <div class="status" id="status"></div>
-
-  <!-- Generated results -->
-  <div class="section-header">
-    <div class="section-title">Generated</div>
+<!-- Humanization controls -->
+<div class="humanize">
+  <div class="humanize-toggle" id="humanize-toggle" onclick="toggleHumanize()">
+    <span><span class="chevron">▶</span> &nbsp;Humanization</span>
+    <span id="humanize-summary" style="font-size:.7rem">off</span>
   </div>
-  <div class="cards-grid" id="cards-grid">
-    <div class="empty">Hit Generate to create phrases tuned to your taste profile.</div>
-  </div>
-
-  <!-- Upload zone -->
-  <div class="section-header" style="margin-top:8px">
-    <div class="section-title">Upload MIDI to train your taste profile</div>
-  </div>
-  <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
-       ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
-    <input type="file" id="file-input" accept=".mid,.midi" multiple onchange="onFileSelect(event)">
-    <div>Drop .mid files here or click to browse</div>
-    <div id="upload-status" style="margin-top:8px;color:var(--purple-light)"></div>
-  </div>
-
-  <!-- Library browser -->
-  <div class="section-header library-header" id="lib-toggle" onclick="toggleLibrary()">
-    <div class="section-title">
-      <span class="chevron">▶</span> Library
-      <span id="lib-count" style="margin-left:8px"></span>
+  <div class="humanize-controls" id="humanize-controls">
+    <div class="hctrl">
+      <label>Swing</label>
+      <input type="range" id="swing" min="0" max="1" step="0.05" value="0"
+             oninput="updateHumanizeDisplay()">
+      <span class="hval" id="swing-val">0%</span>
     </div>
-    <div style="font-size:0.75rem;color:var(--muted)">click to expand</div>
+    <div class="hctrl">
+      <label>Vel Variance</label>
+      <input type="range" id="vel-var" min="0" max="30" step="1" value="0"
+             oninput="updateHumanizeDisplay()">
+      <span class="hval" id="vel-val">±0</span>
+    </div>
+    <div class="hctrl">
+      <label>Timing Jitter</label>
+      <input type="range" id="timing-var" min="0" max="0.05" step="0.005" value="0"
+             oninput="updateHumanizeDisplay()">
+      <span class="hval" id="timing-val">0</span>
+    </div>
   </div>
-  <div class="collapsible collapsed" id="lib-body">
-    <div class="library-filters">
-      <input type="text" class="library-search" id="lib-search" placeholder="Search…" oninput="renderLibrary()">
+</div>
+
+<div class="status" id="status"></div>
+
+<!-- Generated cards -->
+<div class="section-hdr">
+  <div class="section-title">Generated</div>
+  <button class="btn btn-ghost btn-sm" id="btn-clear-gen" style="display:none"
+          onclick="clearGenerated()">Clear</button>
+</div>
+<div class="cards-grid" id="cards-grid">
+  <div class="empty" id="gen-empty">Hit Generate to create phrases tuned to your taste profile.</div>
+</div>
+
+<!-- Upload -->
+<div class="section-hdr">
+  <div class="section-title">Upload MIDI · train your taste profile</div>
+</div>
+<div class="upload-zone" id="upload-zone"
+     onclick="document.getElementById('file-input').click()"
+     ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+  <input type="file" id="file-input" accept=".mid,.midi" multiple onchange="onFileSelect(event)">
+  Drop .mid/.midi files here, or click to browse
+  <div id="upload-status"></div>
+</div>
+
+<!-- Library -->
+<div id="lib-section">
+  <div class="lib-header">
+    <div class="section-title" style="cursor:pointer" onclick="toggleLibrary()">
+      <span id="lib-chevron">▶</span> Library
+      <span id="lib-count" style="margin-left:6px"></span>
+    </div>
+    <div class="lib-filters" id="lib-filters" style="display:none">
+      <input type="text" class="lib-search" id="lib-search" placeholder="Search…" oninput="renderLibrary()">
       <select id="lib-filter-type" onchange="renderLibrary()">
         <option value="">All types</option>
         <option value="chord_progression">Chord Prog</option>
@@ -234,47 +303,83 @@
         <option>G#</option><option>A</option><option>A#</option><option>B</option>
       </select>
     </div>
-    <table class="library-table">
+    <div id="lib-export-btn" style="display:none">
+      <button class="btn btn-ghost btn-sm" onclick="exportLibrary()">↓ Export All</button>
+    </div>
+  </div>
+  <div class="collapsible-body" id="lib-body">
+    <table class="lib-table">
       <thead>
         <tr>
           <th>Type</th><th>Key / Mode</th><th>Bars</th><th>BPM</th>
-          <th>Description</th><th>Date</th><th></th>
+          <th>Description</th><th>Source</th><th></th>
         </tr>
       </thead>
       <tbody id="lib-tbody"></tbody>
     </table>
-    <div class="empty" id="lib-empty" style="display:none">No phrases in library yet.</div>
+    <div class="empty" id="lib-empty" style="display:none">No phrases yet.</div>
   </div>
+</div>
 
 </main>
 
 <script>
 const API_KEY = 'linkvst-dev';
-
-const headers = { 'Authorization': `Bearer ${API_KEY}` };
+const H = { 'Authorization': `Bearer ${API_KEY}` };
 
 let libraryItems = [];
 let currentAudio = null;
 let currentPlayId = null;
+let presets = [];
 
-// ─── Profile badge ───────────────────────────────────────────────────────────
-async function loadProfile() {
-  try {
-    const r = await fetch('/api/library', { headers });
-    const j = await r.json();
-    libraryItems = j.items || [];
-    renderProfileBadge(j.items || []);
-    document.getElementById('lib-count').textContent = `(${libraryItems.length})`;
-    renderLibrary();
-  } catch(e) { console.error(e); }
+// ── Presets ──────────────────────────────────────────────────────────────────
+async function loadPresets() {
+  const r = await fetch('/api/presets', { headers: H });
+  const j = await r.json();
+  presets = j.presets || [];
+  const scroll = document.getElementById('preset-scroll');
+  presets.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.dataset.id = p.id;
+    btn.textContent = `${p.emoji} ${p.name}`;
+    btn.onclick = () => selectPreset(btn, p);
+    scroll.appendChild(btn);
+  });
 }
 
-function renderProfileBadge(items) {
-  const generated = items.filter(i => i.source === 'generated').length;
-  const uploaded  = items.filter(i => i.source === 'uploaded').length;
-  const keys = mostCommon(items.map(i => i.key).filter(Boolean), 3).join(', ');
+function selectPreset(btn, preset) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (!preset) return;
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+  set('ctrl-type', preset.phrase_type || '');
+  set('ctrl-key',  preset.key         || '');
+  set('ctrl-mode', preset.mode        || '');
+  set('ctrl-bars', preset.bars        || 4);
+  set('ctrl-hint', preset.hint        || '');
+}
+
+// ── Profile badge ────────────────────────────────────────────────────────────
+async function loadLibrary() {
+  const r = await fetch('/api/library', { headers: H });
+  const j = await r.json();
+  libraryItems = j.items || [];
+  renderProfileBadge();
+  const cnt = libraryItems.length;
+  document.getElementById('lib-count').textContent = `(${cnt})`;
+  if (cnt) {
+    document.getElementById('lib-export-btn').style.display = '';
+  }
+  renderLibrary();
+}
+
+function renderProfileBadge() {
+  const uploaded  = libraryItems.filter(i => i.source === 'uploaded').length;
+  const generated = libraryItems.filter(i => i.source === 'generated').length;
+  const keys = mostCommon(libraryItems.map(i => i.key).filter(Boolean), 3).join(', ');
   document.getElementById('profile-badge').innerHTML =
-    `<strong>${uploaded}</strong> uploads · <strong>${generated}</strong> generated · keys: <strong>${keys || '—'}</strong>`;
+    `<strong>${uploaded}</strong> uploads · <strong>${generated}</strong> generated · ${keys ? `keys: <strong>${keys}</strong>` : 'no uploads yet'}`;
 }
 
 function mostCommon(arr, n) {
@@ -283,33 +388,43 @@ function mostCommon(arr, n) {
   return Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,n).map(([k])=>k);
 }
 
-// ─── Generate ─────────────────────────────────────────────────────────────────
-async function doGenerate() {
+// ── Generate ─────────────────────────────────────────────────────────────────
+async function doGenerate(extraPhrases) {
   const btn = document.getElementById('btn-generate');
   btn.disabled = true;
   setStatus('<span class="spin"></span> Generating with Claude…');
 
+  const activePreset = document.querySelector('.preset-btn.active')?.dataset.id || null;
+
   const body = {
-    count:       +document.getElementById('ctrl-count').value,
-    phrase_type: document.getElementById('ctrl-type').value || null,
-    key:         document.getElementById('ctrl-key').value  || null,
-    mode:        document.getElementById('ctrl-mode').value || null,
-    bars:        +document.getElementById('ctrl-bars').value,
-    hint:        document.getElementById('ctrl-hint').value,
-    variety:     true,
+    count:             +document.getElementById('ctrl-count').value,
+    phrase_type:       document.getElementById('ctrl-type').value  || null,
+    key:               document.getElementById('ctrl-key').value   || null,
+    mode:              document.getElementById('ctrl-mode').value  || null,
+    bars:              +document.getElementById('ctrl-bars').value,
+    hint:              document.getElementById('ctrl-hint').value,
+    variety:           true,
+    preset:            activePreset || null,
+    swing:             +document.getElementById('swing').value,
+    velocity_variance: +document.getElementById('vel-var').value,
+    timing_variance:   +document.getElementById('timing-var').value,
   };
 
   try {
     const r = await fetch('/api/generate', {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers: { ...H, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     const j = await r.json();
-    renderCards(j.phrases);
-    setStatus(`${j.phrases.length} phrases generated.`);
-    await loadProfile();
+    if (extraPhrases) {
+      appendCards(j.phrases);
+    } else {
+      renderCards(j.phrases);
+    }
+    setStatus(`${j.phrases.length} phrase${j.phrases.length > 1 ? 's' : ''} generated.`);
+    await loadLibrary();
   } catch(e) {
     setStatus(`Error: ${e.message}`);
   } finally {
@@ -317,151 +432,203 @@ async function doGenerate() {
   }
 }
 
-// ─── Cards ────────────────────────────────────────────────────────────────────
-function renderCards(phrases) {
-  const grid = document.getElementById('cards-grid');
-  if (!phrases.length) { grid.innerHTML = '<div class="empty">No phrases returned.</div>'; return; }
-
-  grid.innerHTML = phrases.map(p => `
-    <div class="phrase-card" id="card-${p.id}">
-      <div><span class="card-type">${p.phrase_type.replace('_',' ')}</span></div>
-      <div class="card-key">${p.key} <span style="color:var(--muted);font-weight:400;font-size:.85rem">${p.mode}</span></div>
-      <div class="card-meta">${p.bars} bars · ${p.tempo_bpm} bpm</div>
-      <div class="card-desc">${p.description}</div>
-      <div class="card-actions">
-        <button class="btn btn-sm btn-green" onclick="togglePlay(${p.id}, this)">▶ Play</button>
-        <button class="btn btn-sm btn-outline" onclick="downloadMidi(${p.id}, '${p.key}_${p.mode}_${p.phrase_type}.mid')">↓ MIDI</button>
-        <button class="btn btn-sm btn-danger" onclick="deletePhrase(${p.id}, 'card-${p.id}')">✕</button>
-      </div>
-    </div>
-  `).join('');
+// ── Variation ────────────────────────────────────────────────────────────────
+async function generateVariation(id, btn) {
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '…';
+  setStatus('<span class="spin"></span> Generating variation…');
+  try {
+    const r = await fetch(`/api/generate/variation/${id}`, { method: 'POST', headers: H });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    appendCards(j.phrases);
+    setStatus(`${j.phrases.length} variation${j.phrases.length > 1 ? 's' : ''} added.`);
+    await loadLibrary();
+  } catch(e) {
+    setStatus(`Error: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
-// ─── Audio playback ───────────────────────────────────────────────────────────
-async function togglePlay(id, btn) {
-  if (currentPlayId === id && currentAudio && !currentAudio.ended) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
-    currentAudio = null;
-    currentPlayId = null;
-    setPlayBtn(btn, false);
-    document.querySelectorAll('.phrase-card').forEach(c => c.classList.remove('playing'));
+// ── Cards ─────────────────────────────────────────────────────────────────────
+function typeClass(t) {
+  return {chord_progression:'type-chord',melody:'type-melody',
+          arpeggio:'type-arpeggio',bassline:'type-bassline'}[t] || 'type-chord';
+}
+
+function cardHtml(p) {
+  const typeLabel = (p.phrase_type||'').replace('_',' ');
+  const fname = `${p.key}_${p.mode}_${p.phrase_type}.mid`;
+  return `
+    <div class="phrase-card" id="card-${p.id}">
+      <div class="card-header">
+        <span class="card-type ${typeClass(p.phrase_type)}">${typeLabel}</span>
+        <span style="font-size:.72rem;color:var(--muted)">${p.bars}b · ${p.tempo_bpm}bpm</span>
+      </div>
+      <div class="card-key">${p.key} <span>${p.mode}</span></div>
+      <div class="card-desc">${p.description}</div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-green" id="play-${p.id}" onclick="togglePlay(${p.id},this)">▶ Play</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadMidi(${p.id},'${fname}')">↓</button>
+        <button class="btn btn-sm btn-amber" onclick="generateVariation(${p.id},this)">✦ Vary</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCard(${p.id})">✕</button>
+      </div>
+    </div>`;
+}
+
+function renderCards(phrases) {
+  const grid = document.getElementById('cards-grid');
+  document.getElementById('gen-empty')?.remove();
+  grid.innerHTML = '';
+  if (!phrases.length) {
+    grid.innerHTML = '<div class="empty">No phrases returned.</div>';
     return;
   }
+  phrases.forEach(p => grid.insertAdjacentHTML('beforeend', cardHtml(p)));
+  document.getElementById('btn-clear-gen').style.display = '';
+}
 
-  // Stop current
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio = null;
-    document.querySelectorAll('.phrase-card').forEach(c => c.classList.remove('playing'));
-    document.querySelectorAll('[data-playing]').forEach(b => setPlayBtn(b, false));
+function appendCards(phrases) {
+  const grid = document.getElementById('cards-grid');
+  document.getElementById('gen-empty')?.remove();
+  document.getElementById('btn-clear-gen').style.display = '';
+  phrases.forEach(p => grid.insertAdjacentHTML('beforeend', cardHtml(p)));
+}
+
+function clearGenerated() {
+  document.getElementById('cards-grid').innerHTML =
+    '<div class="empty" id="gen-empty">Hit Generate to create phrases.</div>';
+  document.getElementById('btn-clear-gen').style.display = 'none';
+}
+
+async function deleteCard(id) {
+  await fetch(`/api/library/${id}`, { method: 'DELETE', headers: H });
+  document.getElementById(`card-${id}`)?.remove();
+  if (!document.querySelector('.phrase-card'))
+    document.getElementById('cards-grid').innerHTML =
+      '<div class="empty" id="gen-empty">Hit Generate to create phrases.</div>';
+  await loadLibrary();
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+async function togglePlay(id, btn) {
+  if (currentPlayId === id && currentAudio && !currentAudio.ended) {
+    currentAudio.pause(); currentAudio.currentTime = 0;
+    stopAllPlay(); return;
   }
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  stopAllPlay();
 
   btn.disabled = true;
   btn.textContent = '…';
 
   try {
-    const audio = new Audio(`/api/preview/${id}`);
-    // Inject auth via fetch + blob URL since Audio element can't set headers
-    const r = await fetch(`/api/preview/${id}`, { headers });
-    if (!r.ok) throw new Error(`Preview error ${r.status}`);
+    const r = await fetch(`/api/preview/${id}`, { headers: H });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const blob = await r.blob();
     const url  = URL.createObjectURL(blob);
-
-    currentAudio = new Audio(url);
+    currentAudio  = new Audio(url);
     currentPlayId = id;
     currentAudio.onended = () => {
-      currentAudio = null; currentPlayId = null;
-      setPlayBtn(btn, false);
+      stopAllPlay(); URL.revokeObjectURL(url);
       document.getElementById(`card-${id}`)?.classList.remove('playing');
-      URL.revokeObjectURL(url);
     };
     await currentAudio.play();
-    setPlayBtn(btn, true);
-    btn.dataset.playing = '1';
+    btn.textContent = '⏹ Stop';
     document.getElementById(`card-${id}`)?.classList.add('playing');
   } catch(e) {
     setStatus(`Playback error: ${e.message}`);
+    btn.textContent = '▶ Play';
   } finally {
     btn.disabled = false;
   }
 }
 
-function setPlayBtn(btn, playing) {
-  btn.textContent = playing ? '⏹ Stop' : '▶ Play';
-  delete btn.dataset.playing;
+function stopAllPlay() {
+  currentAudio = null; currentPlayId = null;
+  document.querySelectorAll('[id^="play-"]').forEach(b => { b.textContent = '▶ Play'; });
+  document.querySelectorAll('[id^="lib-play-"]').forEach(b => { b.textContent = '▶'; });
+  document.querySelectorAll('.phrase-card').forEach(c => c.classList.remove('playing'));
 }
 
-// ─── Download MIDI ────────────────────────────────────────────────────────────
+// ── Download ──────────────────────────────────────────────────────────────────
 async function downloadMidi(id, filename) {
-  const r = await fetch(`/api/library/${id}/midi`, { headers });
+  const r = await fetch(`/api/library/${id}/midi`, { headers: H });
   const j = await r.json();
   const bytes = Uint8Array.from(atob(j.midi_b64), c => c.charCodeAt(0));
-  const blob  = new Blob([bytes], { type: 'audio/midi' });
-  const a     = document.createElement('a');
-  a.href      = URL.createObjectURL(blob);
-  a.download  = filename;
+  triggerDownload(new Blob([bytes], {type:'audio/midi'}), filename);
+}
+
+function triggerDownload(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
-// ─── Delete ───────────────────────────────────────────────────────────────────
-async function deletePhrase(id, cardId) {
-  await fetch(`/api/library/${id}`, { method: 'DELETE', headers });
-  document.getElementById(cardId)?.remove();
-  await loadProfile();
+async function exportLibrary() {
+  setStatus('<span class="spin"></span> Preparing zip…');
+  try {
+    const r = await fetch('/api/library/export', { headers: H });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    triggerDownload(blob, 'linkvst_library.zip');
+    setStatus('Export downloaded.');
+  } catch(e) {
+    setStatus(`Export error: ${e.message}`);
+  }
 }
 
-// ─── Upload ───────────────────────────────────────────────────────────────────
+// ── Upload ────────────────────────────────────────────────────────────────────
 function onDragOver(e)  { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
 function onDragLeave(e) { document.getElementById('upload-zone').classList.remove('drag-over'); }
 function onDrop(e)      { e.preventDefault(); onDragLeave(e); uploadFiles(e.dataTransfer.files); }
 function onFileSelect(e){ uploadFiles(e.target.files); e.target.value = ''; }
 
 async function uploadFiles(files) {
-  const status = document.getElementById('upload-status');
+  const st = document.getElementById('upload-status');
   const arr = Array.from(files).filter(f => f.name.match(/\.midi?$/i));
-  if (!arr.length) { status.textContent = 'No .mid files selected.'; return; }
-
+  if (!arr.length) { st.textContent = 'No .mid files found.'; return; }
   for (const file of arr) {
-    status.textContent = `Uploading ${file.name}…`;
+    st.textContent = `Uploading ${file.name}…`;
     const fd = new FormData();
     fd.append('file', file);
     try {
-      const r = await fetch('/api/upload-midi', { method: 'POST', headers, body: fd });
+      const r = await fetch('/api/upload-midi', { method:'POST', headers:H, body:fd });
       const j = await r.json();
-      if (r.ok) {
-        status.textContent = `✓ ${file.name}: ${j.features.key} ${j.features.mode}, ${j.features.phrase_type}`;
-      } else {
-        status.textContent = `✗ ${file.name}: ${j.detail || 'error'}`;
-      }
+      if (r.ok) st.textContent = `✓ ${file.name}: ${j.features.key} ${j.features.mode}, ${j.features.phrase_type}`;
+      else      st.textContent = `✗ ${file.name}: ${j.detail||'error'}`;
     } catch(e) {
-      status.textContent = `✗ ${file.name}: ${e.message}`;
+      st.textContent = `✗ ${file.name}: ${e.message}`;
     }
   }
-  await loadProfile();
+  await loadLibrary();
 }
 
-// ─── Library browser ─────────────────────────────────────────────────────────
+// ── Library ───────────────────────────────────────────────────────────────────
+let libOpen = false;
+
 function toggleLibrary() {
-  const body   = document.getElementById('lib-body');
-  const toggle = document.getElementById('lib-toggle');
-  const label  = toggle.querySelector('div:last-child');
-  body.classList.toggle('collapsed');
-  toggle.classList.toggle('open');
-  label.textContent = body.classList.contains('collapsed') ? 'click to expand' : 'click to collapse';
+  libOpen = !libOpen;
+  document.getElementById('lib-body').classList.toggle('show', libOpen);
+  document.getElementById('lib-filters').style.display = libOpen ? '' : 'none';
+  document.getElementById('lib-chevron').textContent   = libOpen ? '▼' : '▶';
 }
 
 function renderLibrary() {
-  const search  = document.getElementById('lib-search').value.toLowerCase();
-  const fType   = document.getElementById('lib-filter-type').value;
-  const fKey    = document.getElementById('lib-filter-key').value;
-  const tbody   = document.getElementById('lib-tbody');
-  const empty   = document.getElementById('lib-empty');
+  const search = document.getElementById('lib-search')?.value.toLowerCase() || '';
+  const fType  = document.getElementById('lib-filter-type')?.value || '';
+  const fKey   = document.getElementById('lib-filter-key')?.value  || '';
+  const tbody  = document.getElementById('lib-tbody');
+  const empty  = document.getElementById('lib-empty');
 
   let items = libraryItems;
   if (search) items = items.filter(i =>
-    (i.key+' '+i.mode+' '+i.phrase_type+' '+(i.description||'')).toLowerCase().includes(search));
+    `${i.key} ${i.mode} ${i.phrase_type} ${i.description||''}`.toLowerCase().includes(search));
   if (fType) items = items.filter(i => i.phrase_type === fType);
   if (fKey)  items = items.filter(i => i.key === fKey);
 
@@ -473,23 +640,26 @@ function renderLibrary() {
   empty.style.display = 'none';
 
   tbody.innerHTML = items.map(i => {
-    const date = i.created_at ? i.created_at.split('T')[0] : '—';
-    const desc = (i.description || '').substring(0, 60);
+    const date  = (i.created_at||'').split('T')[0] || '—';
+    const desc  = (i.description||'').substring(0,55);
     const fname = `${i.key}_${i.mode}_${i.phrase_type}.mid`;
+    const tc    = typeClass(i.phrase_type);
+    const srcBadge = i.source === 'uploaded'
+      ? '<span style="font-size:.62rem;color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:1px 5px">upload</span>'
+      : '<span style="font-size:.62rem;color:var(--muted)">gen</span>';
     return `<tr>
-      <td><span class="lib-type">${(i.phrase_type||'').replace('_',' ')}</span></td>
+      <td><span class="lib-type ${tc}">${(i.phrase_type||'').replace('_',' ')}</span></td>
       <td><span class="lib-key">${i.key||'—'}</span> <span style="color:var(--muted)">${i.mode||''}</span></td>
       <td>${i.bars||'—'}</td>
       <td>${i.tempo_bpm||'—'}</td>
-      <td style="color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${i.description||''}">${desc}</td>
-      <td style="color:var(--muted)">${date}</td>
-      <td>
-        <div class="lib-actions">
-          <button class="btn-icon" title="Play" onclick="libPlay(${i.id}, this)">▶</button>
-          <button class="btn-icon" title="Download" onclick="downloadMidi(${i.id},'${fname}')">↓</button>
-          <button class="btn-icon" title="Delete" style="color:var(--red)" onclick="libDelete(${i.id}, this)">✕</button>
-        </div>
-      </td>
+      <td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${(i.description||'').replace(/"/g,'&quot;')}">${desc}</td>
+      <td>${srcBadge}</td>
+      <td><div class="lib-actions">
+        <button class="btn-icon" id="lib-play-${i.id}" title="Play" onclick="libPlay(${i.id},this)">▶</button>
+        <button class="btn-icon" title="Download" onclick="downloadMidi(${i.id},'${fname}')">↓</button>
+        <button class="btn-icon" title="Delete" style="color:var(--red)" onclick="libDelete(${i.id},this)">✕</button>
+      </div></td>
     </tr>`;
   }).join('');
 }
@@ -500,14 +670,14 @@ async function libPlay(id, btn) {
     btn.textContent = '▶'; return;
   }
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  document.querySelectorAll('.lib-actions .btn-icon').forEach(b => { if (b.textContent === '⏹') b.textContent = '▶'; });
+  stopAllPlay();
 
   btn.textContent = '…';
   try {
-    const r = await fetch(`/api/preview/${id}`, { headers });
+    const r = await fetch(`/api/preview/${id}`, { headers: H });
     const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    currentAudio = new Audio(url);
+    const url  = URL.createObjectURL(blob);
+    currentAudio  = new Audio(url);
     currentPlayId = id;
     currentAudio.onended = () => { btn.textContent = '▶'; currentAudio = null; currentPlayId = null; URL.revokeObjectURL(url); };
     await currentAudio.play();
@@ -519,17 +689,43 @@ async function libPlay(id, btn) {
 }
 
 async function libDelete(id, btn) {
-  await fetch(`/api/library/${id}`, { method: 'DELETE', headers });
+  await fetch(`/api/library/${id}`, { method:'DELETE', headers:H });
   btn.closest('tr').remove();
   libraryItems = libraryItems.filter(i => i.id !== id);
   document.getElementById('lib-count').textContent = `(${libraryItems.length})`;
-  renderProfileBadge(libraryItems);
+  renderProfileBadge();
 }
 
+// ── Humanize UI ───────────────────────────────────────────────────────────────
+function toggleHumanize() {
+  const toggle   = document.getElementById('humanize-toggle');
+  const controls = document.getElementById('humanize-controls');
+  const isOpen   = controls.classList.toggle('show');
+  toggle.classList.toggle('open', isOpen);
+}
+
+function updateHumanizeDisplay() {
+  const swing   = +document.getElementById('swing').value;
+  const velVar  = +document.getElementById('vel-var').value;
+  const timing  = +document.getElementById('timing-var').value;
+  document.getElementById('swing-val').textContent  = Math.round(swing * 100) + '%';
+  document.getElementById('vel-val').textContent    = `±${velVar}`;
+  document.getElementById('timing-val').textContent = timing === 0 ? '0' : timing.toFixed(3);
+  const any = swing > 0 || velVar > 0 || timing > 0;
+  const parts = [];
+  if (swing   > 0) parts.push(`swing ${Math.round(swing*100)}%`);
+  if (velVar  > 0) parts.push(`vel ±${velVar}`);
+  if (timing  > 0) parts.push(`jitter`);
+  document.getElementById('humanize-summary').textContent = any ? parts.join(' · ') : 'off';
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
 function setStatus(msg) { document.getElementById('status').innerHTML = msg; }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-loadProfile();
+// ── Init ─────────────────────────────────────────────────────────────────────
+(async () => {
+  await Promise.all([loadPresets(), loadLibrary()]);
+})();
 </script>
 </body>
 </html>

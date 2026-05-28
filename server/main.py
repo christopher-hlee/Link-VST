@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 load_dotenv()
 
 from . import db
-from .routes import upload, generate, library, preview
+from .routes import upload, generate, library, preview, presets
 
 
 @asynccontextmanager
@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="LinkVST API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="LinkVST API", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,7 +30,6 @@ app.add_middleware(
 
 API_KEY = os.environ.get("LINK_API_KEY", "")
 
-# Paths that bypass API key auth (Caddy handles auth at the edge)
 _NO_AUTH = {"/health", "/docs", "/openapi.json", "/"}
 
 
@@ -48,7 +47,7 @@ async def auth_middleware(request: Request, call_next):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "link-vst-api", "version": "0.2.0"}
+    return {"status": "ok", "service": "link-vst-api", "version": "0.3.0"}
 
 
 @app.get("/")
@@ -56,7 +55,8 @@ def index():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
-app.include_router(upload.router,  prefix="/api")
+app.include_router(upload.router,   prefix="/api")
 app.include_router(generate.router, prefix="/api")
 app.include_router(library.router,  prefix="/api")
 app.include_router(preview.router,  prefix="/api")
+app.include_router(presets.router,  prefix="/api")

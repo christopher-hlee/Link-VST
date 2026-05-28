@@ -144,3 +144,10 @@ def delete_library_item(item_id: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute("DELETE FROM library WHERE id = ?", (item_id,))
         return cur.rowcount > 0
+
+
+def list_library_with_midi() -> list[dict]:
+    """All library items including raw MIDI bytes — for export."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM library ORDER BY id").fetchall()
+        return [dict(r) for r in rows]

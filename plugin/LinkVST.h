@@ -5,58 +5,64 @@
 #include <vector>
 #include <string>
 #include <mutex>
-#include <set>
 
-enum class PluginState {
-    Idle,
-    Uploading,
-    Generating,
-    Ready,
+struct GenerateSettings {
+    int         count             = 4;
+    std::string phrase_type;       // "" = any (use taste profile)
+    std::string key;
+    std::string mode;
+    int         bars              = 4;
+    std::string hint;
+    // Humanization
+    float       swing             = 0.f;
+    int         velocity_variance = 0;
+    float       timing_variance   = 0.f;
 };
+
+enum class PluginState { Idle, Uploading, Generating, Ready };
 
 class LinkVST final : public iplug::Plugin {
 public:
     LinkVST(const iplug::InstanceInfo& info);
 
-    // iPlug2 overrides
     void OnUIOpen() override;
     void OnUIClose() override;
     void ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, int nFrames) override;
 
     // ── Generate ──────────────────────────────────────────────────────────────
-    void RequestGenerate(int count = 4, const std::string& phrase_type = "",
-                         const std::string& key = "", const std::string& mode = "",
-                         int bars = 4, const std::string& hint = "");
-
-    // ── Upload ────────────────────────────────────────────────────────────────
+    void RequestGenerate();   // uses mSettings
     void UploadMidiFile(const std::string& path);
 
+    // ── Settings from UI dropdowns / sliders ──────────────────────────────────
+    void SetSetting(const std::string& key, const std::string& value);
+    void SetHumanize(const std::string& param, float value);
+
     // ── Library ───────────────────────────────────────────────────────────────
-    void SavePhrase(int index);
     void DeletePhrase(int id);
     void RefreshLibrary();
 
     // ── Drag-out ──────────────────────────────────────────────────────────────
-    // From generated phrase tiles
     void BeginDragOut(int phrase_index, float x, float y);
-    // From library browser rows
     void BeginLibraryDragOut(int library_index, float x, float y);
 
     // ── Preview ───────────────────────────────────────────────────────────────
     void TogglePreview(int library_id);
-    bool IsPreviewPlaying(int library_id) const { return mPreviewId == library_id && mPreview.IsPlaying(); }
+    bool IsPreviewPlaying(int library_id) const {
+        return mPreviewId == library_id && mPreview.IsPlaying();
+    }
     void StopPreview() { mPreview.Stop(); mPreviewId = -1; }
 
-    // ── Accessors for panels ──────────────────────────────────────────────────
+    // ── Accessors ─────────────────────────────────────────────────────────────
     const std::vector<PhraseInfo>& GetGeneratedPhrases() const { return mGeneratedPhrases; }
     const std::vector<PhraseInfo>& GetLibraryPhrases()   const { return mLibraryPhrases; }
     PluginState GetState()         const { return mState; }
     std::string GetStatusMessage() const { return mStatusMessage; }
 
 private:
-    ApiClient     mApi;
-    PreviewPlayer mPreview;
-    int           mPreviewId = -1;
+    ApiClient       mApi;
+    PreviewPlayer   mPreview;
+    int             mPreviewId = -1;
+    GenerateSettings mSettings;
 
     std::vector<PhraseInfo> mGeneratedPhrases;
     std::vector<PhraseInfo> mLibraryPhrases;
@@ -66,7 +72,6 @@ private:
 
     void SetState(PluginState state, const std::string& msg = "");
 
-    // Platform drag-out — implemented in DragOut_mac.mm / DragOut_win.cpp
     void DoDragOut(const std::vector<uint8_t>& midi_bytes, const std::string& filename,
                    void* platform_view, float x, float y);
 };
