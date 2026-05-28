@@ -86,9 +86,10 @@ cmake --build build --config Release
 - [x] Full HTTP client (libcurl + nlohmann/json, async generate/upload)
 - [x] macOS drag-out (`NSDraggingSession` + temp file cleanup)
 - [x] Windows drag-out (COM `IDataObject` / `IDropSource` + CF_HDROP)
-- [ ] Plugin UI polish (waveform preview, key/type filter dropdowns)
-- [ ] MIDI preview playback in-plugin before drag-out
-- [ ] Library browser panel with search/filter
+- [x] MIDI preview playback — FluidSynth renders WAV server-side; plugin plays via `ProcessBlock`; web UI via fetch + Web Audio
+- [x] Library browser panel — search, type/key filter, drag-out, play, delete
+- [x] Web UI — full single-page app at `/linkvst/` (generate, upload, preview, library)
 - [ ] Style presets (e.g. "jazz", "lo-fi", "cinematic")
 - [ ] Export all library as zip
 - [ ] Humanization controls (swing, velocity variance)
+- [ ] Plugin UI: key/type filter dropdowns on generate panel

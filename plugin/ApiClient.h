@@ -4,13 +4,14 @@
 #include <vector>
 
 struct PhraseInfo {
+  int         id = -1;              // library ID (for preview + delete)
   std::string phrase_type;
   std::string key;
   std::string mode;
-  int tempo_bpm;
-  int bars;
+  int         tempo_bpm = 120;
+  int         bars      = 4;
   std::string description;
-  std::vector<uint8_t> midi_bytes;  // decoded from base64
+  std::vector<uint8_t> midi_bytes;  // decoded from base64 (empty for library items)
 };
 
 using GenerateCallback = std::function<void(bool success, std::vector<PhraseInfo> phrases, std::string error)>;

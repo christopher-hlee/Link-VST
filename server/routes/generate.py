@@ -11,7 +11,7 @@ router = APIRouter()
 
 class GenerateRequest(BaseModel):
     count: int = 4
-    phrase_type: str | None = None  # override; None = use profile preference
+    phrase_type: str | None = None
     key: str | None = None
     mode: str | None = None
     bars: int = 4
@@ -21,9 +21,9 @@ class GenerateRequest(BaseModel):
 
 @router.post("/generate")
 async def generate(req: GenerateRequest):
-    features = db.get_all_features()
+    features  = db.get_all_features()
     exemplars = db.get_exemplar_notes()
-    profile = build_profile(features, exemplars)
+    profile   = build_profile(features, exemplars)
 
     try:
         if req.count == 1:
@@ -43,22 +43,33 @@ async def generate(req: GenerateRequest):
     results = []
     for phrase in phrases:
         midi_bytes = phrase_to_midi(phrase)
+        filename   = f"{phrase.key}_{phrase.mode}_{phrase.phrase_type}.mid"
+
+        # Auto-save to library so preview endpoint can serve audio
+        library_id = db.insert_library(
+            filename=filename,
+            midi_bytes=midi_bytes,
+            phrase=phrase.model_dump(),
+            source="generated",
+        )
+
         results.append({
+            "id":          library_id,
             "phrase_type": phrase.phrase_type,
-            "key": phrase.key,
-            "mode": phrase.mode,
-            "tempo_bpm": phrase.tempo_bpm,
-            "bars": phrase.bars,
+            "key":         phrase.key,
+            "mode":        phrase.mode,
+            "tempo_bpm":   phrase.tempo_bpm,
+            "bars":        phrase.bars,
             "description": phrase.description,
-            "midi_b64": base64.b64encode(midi_bytes).decode(),
+            "midi_b64":    base64.b64encode(midi_bytes).decode(),
         })
 
     return {
         "phrases": results,
         "profile_summary": {
-            "total_uploads": profile.total_uploads,
-            "preferred_keys": profile.preferred_keys,
-            "preferred_modes": profile.preferred_modes,
-            "preferred_types": profile.preferred_phrase_types,
+            "total_uploads":    profile.total_uploads,
+            "preferred_keys":   profile.preferred_keys,
+            "preferred_modes":  profile.preferred_modes,
+            "preferred_types":  profile.preferred_phrase_types,
         },
     }

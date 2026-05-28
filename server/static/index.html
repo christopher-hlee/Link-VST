@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LinkVST</title>
+<style>
+  :root {
+    --bg:      #0d0e1a;
+    --surface: #141526;
+    --card:    #1a1b2e;
+    --border:  #2a2b45;
+    --purple:  #7c3aed;
+    --purple-light: #a78bfa;
+    --green:   #22c55e;
+    --red:     #ef4444;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --mono:    'Fira Mono', 'Consolas', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+  /* ---- Layout ---- */
+  .header { display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; color: var(--purple-light); }
+  .logo span { color: var(--muted); font-weight: 400; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .profile-badge { font-size: 0.75rem; color: var(--muted); background: var(--card);
+                   border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; }
+  .profile-badge strong { color: var(--purple-light); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+  /* ---- Controls ---- */
+  .controls { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+              padding: 18px 20px; margin-bottom: 24px; }
+  .controls-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+  .ctrl { display: flex; flex-direction: column; gap: 4px; }
+  .ctrl label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+  select, input[type=text] {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 7px 10px; font-size: 0.85rem; outline: none; }
+  select:focus, input[type=text]:focus { border-color: var(--purple); }
+  input[type=text] { width: 200px; }
+  .hint-ctrl { flex: 1; min-width: 160px; }
+  .hint-ctrl input { width: 100%; }
+
+  .btn { padding: 9px 20px; border-radius: 6px; border: none; cursor: pointer;
+         font-size: 0.875rem; font-weight: 600; transition: filter .15s; }
+  .btn:hover { filter: brightness(1.15); }
+  .btn:active { filter: brightness(0.9); }
+  .btn-primary { background: var(--purple); color: #fff; }
+  .btn-outline { background: transparent; color: var(--purple-light);
+                 border: 1px solid var(--purple); }
+  .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+  .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
+  .btn-green  { background: var(--green); color: #000; }
+  .btn-icon { background: transparent; border: none; cursor: pointer; color: var(--muted);
+              font-size: 1rem; padding: 4px 8px; border-radius: 4px; transition: color .15s; }
+  .btn-icon:hover { color: var(--text); }
+
+  /* ---- Section header ---- */
+  .section-header { display: flex; align-items: center; justify-content: space-between;
+                    margin-bottom: 14px; }
+  .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+
+  /* ---- Generated cards ---- */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-bottom: 32px; }
+  .phrase-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+                 padding: 16px; display: flex; flex-direction: column; gap: 10px;
+                 transition: border-color .2s; }
+  .phrase-card:hover { border-color: var(--purple); }
+  .phrase-card.playing { border-color: var(--green); box-shadow: 0 0 0 1px var(--green)22; }
+
+  .card-type { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px;
+               background: var(--purple)33; color: var(--purple-light); border-radius: 4px;
+               padding: 2px 8px; display: inline-block; }
+  .card-key  { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--text); }
+  .card-meta { font-size: 0.78rem; color: var(--muted); }
+  .card-desc { font-size: 0.78rem; color: var(--muted); font-style: italic; line-height: 1.4;
+               flex: 1; }
+  .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* ---- Upload zone ---- */
+  .upload-zone { border: 2px dashed var(--border); border-radius: 10px;
+                 padding: 28px; text-align: center; cursor: pointer; transition: border-color .2s;
+                 color: var(--muted); font-size: 0.875rem; margin-bottom: 32px; }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--purple); color: var(--purple-light); }
+  .upload-zone input { display: none; }
+
+  /* ---- Library ---- */
+  .library-header { cursor: pointer; user-select: none; }
+  .library-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .library-filters select, .library-filters input { font-size: 0.8rem; padding: 5px 8px; }
+  .library-search { flex: 1; min-width: 140px; }
+
+  .library-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .library-table th { text-align: left; color: var(--muted); font-size: 0.7rem; text-transform: uppercase;
+                      letter-spacing: 0.5px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .library-table td { padding: 8px 10px; border-bottom: 1px solid var(--border)88; vertical-align: middle; }
+  .library-table tr:hover td { background: var(--surface); }
+  .lib-type { font-size: 0.65rem; text-transform: uppercase; background: var(--purple)22;
+              color: var(--purple-light); border-radius: 3px; padding: 1px 6px; }
+  .lib-key { font-family: var(--mono); font-weight: 600; }
+  .lib-actions { display: flex; gap: 4px; justify-content: flex-end; }
+
+  /* ---- Status / spinner ---- */
+  .status { font-size: 0.82rem; color: var(--muted); min-height: 20px; margin-bottom: 14px; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+          border-top-color: var(--purple); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty { color: var(--muted); font-size: 0.85rem; padding: 20px; text-align: center; }
+  .collapsible { overflow: hidden; }
+  .collapsed { display: none; }
+  .chevron { transition: transform .2s; display: inline-block; }
+  .open .chevron { transform: rotate(90deg); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">⬡ LinkVST <span>/ MIDI taste engine</span></div>
+  <div class="header-right">
+    <div class="profile-badge" id="profile-badge">Loading profile…</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Generate controls -->
+  <div class="controls">
+    <div class="controls-row">
+      <div class="ctrl">
+        <label>Count</label>
+        <select id="ctrl-count">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="4" selected>4</option>
+          <option value="8">8</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Type</label>
+        <select id="ctrl-type">
+          <option value="">Any</option>
+          <option value="chord_progression">Chord Prog</option>
+          <option value="melody">Melody</option>
+          <option value="arpeggio">Arpeggio</option>
+          <option value="bassline">Bassline</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Key</label>
+        <select id="ctrl-key">
+          <option value="">Any</option>
+          <option>C</option><option>C#</option><option>D</option><option>D#</option>
+          <option>E</option><option>F</option><option>F#</option><option>G</option>
+          <option>G#</option><option>A</option><option>A#</option><option>B</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Mode</label>
+        <select id="ctrl-mode">
+          <option value="">Any</option>
+          <option>major</option><option>minor</option><option>dorian</option>
+          <option>phrygian</option><option>lydian</option><option>mixolydian</option><option>locrian</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Bars</label>
+        <select id="ctrl-bars">
+          <option value="2">2</option>
+          <option value="4" selected>4</option>
+          <option value="8">8</option>
+          <option value="16">16</option>
+        </select>
+      </div>
+      <div class="ctrl hint-ctrl">
+        <label>Style hint</label>
+        <input type="text" id="ctrl-hint" placeholder="e.g. jazzy, lo-fi, dark…">
+      </div>
+      <div class="ctrl" style="justify-content:flex-end">
+        <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()">▶ Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <!-- Generated results -->
+  <div class="section-header">
+    <div class="section-title">Generated</div>
+  </div>
+  <div class="cards-grid" id="cards-grid">
+    <div class="empty">Hit Generate to create phrases tuned to your taste profile.</div>
+  </div>
+
+  <!-- Upload zone -->
+  <div class="section-header" style="margin-top:8px">
+    <div class="section-title">Upload MIDI to train your taste profile</div>
+  </div>
+  <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+       ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+    <input type="file" id="file-input" accept=".mid,.midi" multiple onchange="onFileSelect(event)">
+    <div>Drop .mid files here or click to browse</div>
+    <div id="upload-status" style="margin-top:8px;color:var(--purple-light)"></div>
+  </div>
+
+  <!-- Library browser -->
+  <div class="section-header library-header" id="lib-toggle" onclick="toggleLibrary()">
+    <div class="section-title">
+      <span class="chevron">▶</span> Library
+      <span id="lib-count" style="margin-left:8px"></span>
+    </div>
+    <div style="font-size:0.75rem;color:var(--muted)">click to expand</div>
+  </div>
+  <div class="collapsible collapsed" id="lib-body">
+    <div class="library-filters">
+      <input type="text" class="library-search" id="lib-search" placeholder="Search…" oninput="renderLibrary()">
+      <select id="lib-filter-type" onchange="renderLibrary()">
+        <option value="">All types</option>
+        <option value="chord_progression">Chord Prog</option>
+        <option value="melody">Melody</option>
+        <option value="arpeggio">Arpeggio</option>
+        <option value="bassline">Bassline</option>
+      </select>
+      <select id="lib-filter-key" onchange="renderLibrary()">
+        <option value="">All keys</option>
+        <option>C</option><option>C#</option><option>D</option><option>D#</option>
+        <option>E</option><option>F</option><option>F#</option><option>G</option>
+        <option>G#</option><option>A</option><option>A#</option><option>B</option>
+      </select>
+    </div>
+    <table class="library-table">
+      <thead>
+        <tr>
+          <th>Type</th><th>Key / Mode</th><th>Bars</th><th>BPM</th>
+          <th>Description</th><th>Date</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="lib-tbody"></tbody>
+    </table>
+    <div class="empty" id="lib-empty" style="display:none">No phrases in library yet.</div>
+  </div>
+
+</main>
+
+<script>
+const API_KEY = 'linkvst-dev';
+
+const headers = { 'Authorization': `Bearer ${API_KEY}` };
+
+let libraryItems = [];
+let currentAudio = null;
+let currentPlayId = null;
+
+// ─── Profile badge ───────────────────────────────────────────────────────────
+async function loadProfile() {
+  try {
+    const r = await fetch('/api/library', { headers });
+    const j = await r.json();
+    libraryItems = j.items || [];
+    renderProfileBadge(j.items || []);
+    document.getElementById('lib-count').textContent = `(${libraryItems.length})`;
+    renderLibrary();
+  } catch(e) { console.error(e); }
+}
+
+function renderProfileBadge(items) {
+  const generated = items.filter(i => i.source === 'generated').length;
+  const uploaded  = items.filter(i => i.source === 'uploaded').length;
+  const keys = mostCommon(items.map(i => i.key).filter(Boolean), 3).join(', ');
+  document.getElementById('profile-badge').innerHTML =
+    `<strong>${uploaded}</strong> uploads · <strong>${generated}</strong> generated · keys: <strong>${keys || '—'}</strong>`;
+}
+
+function mostCommon(arr, n) {
+  const c = {};
+  arr.forEach(v => c[v] = (c[v]||0)+1);
+  return Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,n).map(([k])=>k);
+}
+
+// ─── Generate ─────────────────────────────────────────────────────────────────
+async function doGenerate() {
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true;
+  setStatus('<span class="spin"></span> Generating with Claude…');
+
+  const body = {
+    count:       +document.getElementById('ctrl-count').value,
+    phrase_type: document.getElementById('ctrl-type').value || null,
+    key:         document.getElementById('ctrl-key').value  || null,
+    mode:        document.getElementById('ctrl-mode').value || null,
+    bars:        +document.getElementById('ctrl-bars').value,
+    hint:        document.getElementById('ctrl-hint').value,
+    variety:     true,
+  };
+
+  try {
+    const r = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+    const j = await r.json();
+    renderCards(j.phrases);
+    setStatus(`${j.phrases.length} phrases generated.`);
+    await loadProfile();
+  } catch(e) {
+    setStatus(`Error: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─── Cards ────────────────────────────────────────────────────────────────────
+function renderCards(phrases) {
+  const grid = document.getElementById('cards-grid');
+  if (!phrases.length) { grid.innerHTML = '<div class="empty">No phrases returned.</div>'; return; }
+
+  grid.innerHTML = phrases.map(p => `
+    <div class="phrase-card" id="card-${p.id}">
+      <div><span class="card-type">${p.phrase_type.replace('_',' ')}</span></div>
+      <div class="card-key">${p.key} <span style="color:var(--muted);font-weight:400;font-size:.85rem">${p.mode}</span></div>
+      <div class="card-meta">${p.bars} bars · ${p.tempo_bpm} bpm</div>
+      <div class="card-desc">${p.description}</div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-green" onclick="togglePlay(${p.id}, this)">▶ Play</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadMidi(${p.id}, '${p.key}_${p.mode}_${p.phrase_type}.mid')">↓ MIDI</button>
+        <button class="btn btn-sm btn-danger" onclick="deletePhrase(${p.id}, 'card-${p.id}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Audio playback ───────────────────────────────────────────────────────────
+async function togglePlay(id, btn) {
+  if (currentPlayId === id && currentAudio && !currentAudio.ended) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+    currentPlayId = null;
+    setPlayBtn(btn, false);
+    document.querySelectorAll('.phrase-card').forEach(c => c.classList.remove('playing'));
+    return;
+  }
+
+  // Stop current
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+    document.querySelectorAll('.phrase-card').forEach(c => c.classList.remove('playing'));
+    document.querySelectorAll('[data-playing]').forEach(b => setPlayBtn(b, false));
+  }
+
+  btn.disabled = true;
+  btn.textContent = '…';
+
+  try {
+    const audio = new Audio(`/api/preview/${id}`);
+    // Inject auth via fetch + blob URL since Audio element can't set headers
+    const r = await fetch(`/api/preview/${id}`, { headers });
+    if (!r.ok) throw new Error(`Preview error ${r.status}`);
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+
+    currentAudio = new Audio(url);
+    currentPlayId = id;
+    currentAudio.onended = () => {
+      currentAudio = null; currentPlayId = null;
+      setPlayBtn(btn, false);
+      document.getElementById(`card-${id}`)?.classList.remove('playing');
+      URL.revokeObjectURL(url);
+    };
+    await currentAudio.play();
+    setPlayBtn(btn, true);
+    btn.dataset.playing = '1';
+    document.getElementById(`card-${id}`)?.classList.add('playing');
+  } catch(e) {
+    setStatus(`Playback error: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function setPlayBtn(btn, playing) {
+  btn.textContent = playing ? '⏹ Stop' : '▶ Play';
+  delete btn.dataset.playing;
+}
+
+// ─── Download MIDI ────────────────────────────────────────────────────────────
+async function downloadMidi(id, filename) {
+  const r = await fetch(`/api/library/${id}/midi`, { headers });
+  const j = await r.json();
+  const bytes = Uint8Array.from(atob(j.midi_b64), c => c.charCodeAt(0));
+  const blob  = new Blob([bytes], { type: 'audio/midi' });
+  const a     = document.createElement('a');
+  a.href      = URL.createObjectURL(blob);
+  a.download  = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+async function deletePhrase(id, cardId) {
+  await fetch(`/api/library/${id}`, { method: 'DELETE', headers });
+  document.getElementById(cardId)?.remove();
+  await loadProfile();
+}
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
+function onDragOver(e)  { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
+function onDragLeave(e) { document.getElementById('upload-zone').classList.remove('drag-over'); }
+function onDrop(e)      { e.preventDefault(); onDragLeave(e); uploadFiles(e.dataTransfer.files); }
+function onFileSelect(e){ uploadFiles(e.target.files); e.target.value = ''; }
+
+async function uploadFiles(files) {
+  const status = document.getElementById('upload-status');
+  const arr = Array.from(files).filter(f => f.name.match(/\.midi?$/i));
+  if (!arr.length) { status.textContent = 'No .mid files selected.'; return; }
+
+  for (const file of arr) {
+    status.textContent = `Uploading ${file.name}…`;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch('/api/upload-midi', { method: 'POST', headers, body: fd });
+      const j = await r.json();
+      if (r.ok) {
+        status.textContent = `✓ ${file.name}: ${j.features.key} ${j.features.mode}, ${j.features.phrase_type}`;
+      } else {
+        status.textContent = `✗ ${file.name}: ${j.detail || 'error'}`;
+      }
+    } catch(e) {
+      status.textContent = `✗ ${file.name}: ${e.message}`;
+    }
+  }
+  await loadProfile();
+}
+
+// ─── Library browser ─────────────────────────────────────────────────────────
+function toggleLibrary() {
+  const body   = document.getElementById('lib-body');
+  const toggle = document.getElementById('lib-toggle');
+  const label  = toggle.querySelector('div:last-child');
+  body.classList.toggle('collapsed');
+  toggle.classList.toggle('open');
+  label.textContent = body.classList.contains('collapsed') ? 'click to expand' : 'click to collapse';
+}
+
+function renderLibrary() {
+  const search  = document.getElementById('lib-search').value.toLowerCase();
+  const fType   = document.getElementById('lib-filter-type').value;
+  const fKey    = document.getElementById('lib-filter-key').value;
+  const tbody   = document.getElementById('lib-tbody');
+  const empty   = document.getElementById('lib-empty');
+
+  let items = libraryItems;
+  if (search) items = items.filter(i =>
+    (i.key+' '+i.mode+' '+i.phrase_type+' '+(i.description||'')).toLowerCase().includes(search));
+  if (fType) items = items.filter(i => i.phrase_type === fType);
+  if (fKey)  items = items.filter(i => i.key === fKey);
+
+  if (!items.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = items.map(i => {
+    const date = i.created_at ? i.created_at.split('T')[0] : '—';
+    const desc = (i.description || '').substring(0, 60);
+    const fname = `${i.key}_${i.mode}_${i.phrase_type}.mid`;
+    return `<tr>
+      <td><span class="lib-type">${(i.phrase_type||'').replace('_',' ')}</span></td>
+      <td><span class="lib-key">${i.key||'—'}</span> <span style="color:var(--muted)">${i.mode||''}</span></td>
+      <td>${i.bars||'—'}</td>
+      <td>${i.tempo_bpm||'—'}</td>
+      <td style="color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${i.description||''}">${desc}</td>
+      <td style="color:var(--muted)">${date}</td>
+      <td>
+        <div class="lib-actions">
+          <button class="btn-icon" title="Play" onclick="libPlay(${i.id}, this)">▶</button>
+          <button class="btn-icon" title="Download" onclick="downloadMidi(${i.id},'${fname}')">↓</button>
+          <button class="btn-icon" title="Delete" style="color:var(--red)" onclick="libDelete(${i.id}, this)">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function libPlay(id, btn) {
+  if (currentPlayId === id && currentAudio && !currentAudio.ended) {
+    currentAudio.pause(); currentAudio = null; currentPlayId = null;
+    btn.textContent = '▶'; return;
+  }
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  document.querySelectorAll('.lib-actions .btn-icon').forEach(b => { if (b.textContent === '⏹') b.textContent = '▶'; });
+
+  btn.textContent = '…';
+  try {
+    const r = await fetch(`/api/preview/${id}`, { headers });
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentPlayId = id;
+    currentAudio.onended = () => { btn.textContent = '▶'; currentAudio = null; currentPlayId = null; URL.revokeObjectURL(url); };
+    await currentAudio.play();
+    btn.textContent = '⏹';
+  } catch(e) {
+    btn.textContent = '▶';
+    setStatus(`Playback error: ${e.message}`);
+  }
+}
+
+async function libDelete(id, btn) {
+  await fetch(`/api/library/${id}`, { method: 'DELETE', headers });
+  btn.closest('tr').remove();
+  libraryItems = libraryItems.filter(i => i.id !== id);
+  document.getElementById('lib-count').textContent = `(${libraryItems.length})`;
+  renderProfileBadge(libraryItems);
+}
+
+function setStatus(msg) { document.getElementById('status').innerHTML = msg; }
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+loadProfile();
+</script>
+</body>
+</html>

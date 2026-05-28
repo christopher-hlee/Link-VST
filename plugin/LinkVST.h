@@ -1,60 +1,72 @@
 #pragma once
 #include "IPlug_include_in_plug_hdr.h"
 #include "ApiClient.h"
+#include "PreviewPlayer.h"
 #include <vector>
 #include <string>
 #include <mutex>
-
-// Panel forward declarations
-class GeneratePanel;
-class LibraryPanel;
+#include <set>
 
 enum class PluginState {
-  Idle,
-  Uploading,
-  Generating,
-  Ready,
+    Idle,
+    Uploading,
+    Generating,
+    Ready,
 };
 
 class LinkVST final : public iplug::Plugin {
 public:
-  LinkVST(const iplug::InstanceInfo& info);
+    LinkVST(const iplug::InstanceInfo& info);
 
-  // iPlug2 overrides
-  void OnUIOpen() override;
-  void OnUIClose() override;
-  bool OnKeyDown(const iplug::IKeyPress& key) override;
+    // iPlug2 overrides
+    void OnUIOpen() override;
+    void OnUIClose() override;
+    void ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, int nFrames) override;
 
-  // Called from UI panels
-  void RequestGenerate(int count = 4, const std::string& phrase_type = "",
-                       const std::string& key = "", const std::string& mode = "",
-                       int bars = 4, const std::string& hint = "");
+    // ── Generate ──────────────────────────────────────────────────────────────
+    void RequestGenerate(int count = 4, const std::string& phrase_type = "",
+                         const std::string& key = "", const std::string& mode = "",
+                         int bars = 4, const std::string& hint = "");
 
-  void UploadMidiFile(const std::string& path);
+    // ── Upload ────────────────────────────────────────────────────────────────
+    void UploadMidiFile(const std::string& path);
 
-  void SavePhrase(int index);
-  void DeletePhrase(int id);
+    // ── Library ───────────────────────────────────────────────────────────────
+    void SavePhrase(int index);
+    void DeletePhrase(int id);
+    void RefreshLibrary();
 
-  // Drag-out: called from UI with mouse coords and platform view pointer
-  void BeginDragOut(int phrase_index, float x, float y);
+    // ── Drag-out ──────────────────────────────────────────────────────────────
+    // From generated phrase tiles
+    void BeginDragOut(int phrase_index, float x, float y);
+    // From library browser rows
+    void BeginLibraryDragOut(int library_index, float x, float y);
 
-  const std::vector<PhraseInfo>& GetGeneratedPhrases() const { return mGeneratedPhrases; }
-  const std::vector<PhraseInfo>& GetLibraryPhrases()   const { return mLibraryPhrases; }
-  PluginState GetState() const { return mState; }
-  std::string GetStatusMessage() const { return mStatusMessage; }
+    // ── Preview ───────────────────────────────────────────────────────────────
+    void TogglePreview(int library_id);
+    bool IsPreviewPlaying(int library_id) const { return mPreviewId == library_id && mPreview.IsPlaying(); }
+    void StopPreview() { mPreview.Stop(); mPreviewId = -1; }
+
+    // ── Accessors for panels ──────────────────────────────────────────────────
+    const std::vector<PhraseInfo>& GetGeneratedPhrases() const { return mGeneratedPhrases; }
+    const std::vector<PhraseInfo>& GetLibraryPhrases()   const { return mLibraryPhrases; }
+    PluginState GetState()         const { return mState; }
+    std::string GetStatusMessage() const { return mStatusMessage; }
 
 private:
-  ApiClient mApi;
-  std::vector<PhraseInfo> mGeneratedPhrases;
-  std::vector<PhraseInfo> mLibraryPhrases;
-  PluginState mState = PluginState::Idle;
-  std::string mStatusMessage;
-  mutable std::mutex mMutex;
+    ApiClient     mApi;
+    PreviewPlayer mPreview;
+    int           mPreviewId = -1;
 
-  void SetState(PluginState state, const std::string& msg = "");
-  void RefreshLibrary();
+    std::vector<PhraseInfo> mGeneratedPhrases;
+    std::vector<PhraseInfo> mLibraryPhrases;
+    PluginState             mState = PluginState::Idle;
+    std::string             mStatusMessage;
+    mutable std::mutex      mMutex;
 
-  // Platform drag-out — implemented in DragOut_mac.mm / DragOut_win.cpp
-  void DoDragOut(const std::vector<uint8_t>& midi_bytes, const std::string& filename,
-                 void* platform_view, float x, float y);
+    void SetState(PluginState state, const std::string& msg = "");
+
+    // Platform drag-out — implemented in DragOut_mac.mm / DragOut_win.cpp
+    void DoDragOut(const std::vector<uint8_t>& midi_bytes, const std::string& filename,
+                   void* platform_view, float x, float y);
 };

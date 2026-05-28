@@ -14,7 +14,6 @@ endif()
 # --- Dependencies via FetchContent ---
 include(FetchContent)
 
-# nlohmann/json
 FetchContent_Declare(
   nlohmann_json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -23,14 +22,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-# libcurl — prefer system; allow override
 find_package(CURL REQUIRED)
 
-# --- Platform-specific sources ---
+# --- Sources ---
 set(SOURCES
   LinkVST.cpp
   ApiClient.cpp
+  PreviewPlayer.cpp
   GeneratePanel.cpp
+  LibraryPanel.cpp
 )
 
 if(APPLE)
@@ -39,39 +39,33 @@ elseif(WIN32)
   list(APPEND SOURCES DragOut_win.cpp)
 endif()
 
-# --- iPlug2 boilerplate ---
+# --- iPlug2 ---
 include("${IPLUG2_PATH}/IPlug/IPlug.cmake")
 
 iplug2_target_add(LinkVST APP  SOURCES ${SOURCES})
 iplug2_target_add(LinkVST VST3 SOURCES ${SOURCES})
-
 if(APPLE)
   iplug2_target_add(LinkVST AUv2 SOURCES ${SOURCES})
 endif()
 
-# --- Apply to all targets ---
-foreach(_target LinkVST_APP LinkVST_VST3)
-  target_link_libraries(${_target} PRIVATE nlohmann_json::nlohmann_json CURL::libcurl)
-  target_compile_definitions(${_target} PRIVATE
+# --- Common config for all targets ---
+set(ALL_TARGETS LinkVST_APP LinkVST_VST3)
+if(APPLE)
+  list(APPEND ALL_TARGETS LinkVST_AUv2)
+endif()
+
+foreach(_t ${ALL_TARGETS})
+  target_include_directories(${_t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(${_t} PRIVATE nlohmann_json::nlohmann_json CURL::libcurl)
+  target_compile_definitions(${_t} PRIVATE
     LINKVST_API_URL="http://localhost:8002"
     LINKVST_API_KEY="linkvst-dev"
   )
   if(WIN32)
-    target_link_libraries(${_target} PRIVATE ole32 oleaut32 uuid rpcrt4 shell32)
+    target_link_libraries(${_t} PRIVATE ole32 oleaut32 uuid rpcrt4 shell32)
   endif()
   if(APPLE)
-    target_link_libraries(${_target} PRIVATE "-framework AppKit" "-framework Foundation")
-    # Allow .mm files to be compiled as Objective-C++
-    set_source_files_properties(DragOut_mac.mm PROPERTIES
-      COMPILE_FLAGS "-x objective-c++"
-    )
+    target_link_libraries(${_t} PRIVATE "-framework AppKit" "-framework Foundation")
+    set_source_files_properties(DragOut_mac.mm PROPERTIES COMPILE_FLAGS "-x objective-c++")
   endif()
 endforeach()
-
-if(APPLE)
-  target_link_libraries(LinkVST_AUv2 PRIVATE nlohmann_json::nlohmann_json CURL::libcurl
-    "-framework AppKit" "-framework Foundation")
-  set_target_properties(LinkVST_AUv2 PROPERTIES
-    COMPILE_DEFINITIONS "LINKVST_API_URL=\"http://localhost:8002\";LINKVST_API_KEY=\"linkvst-dev\""
-  )
-endif()

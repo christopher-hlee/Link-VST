@@ -196,6 +196,7 @@ void ApiClient::Generate(int count,
 
             for (const auto& p : j.at("phrases")) {
                 PhraseInfo info;
+                info.id          = p.value("id", -1);
                 info.phrase_type = p.value("phrase_type", "");
                 info.key         = p.value("key", "C");
                 info.mode        = p.value("mode", "major");
@@ -225,13 +226,14 @@ std::vector<PhraseInfo> ApiClient::GetLibrary() {
         auto j = json::parse(resp);
         for (const auto& item : j.at("items")) {
             PhraseInfo info;
+            info.id          = item.value("id", -1);
             info.phrase_type = item.value("phrase_type", "");
             info.key         = item.value("key", "C");
             info.mode        = item.value("mode", "major");
             info.tempo_bpm   = item.value("tempo_bpm", 120);
             info.bars        = item.value("bars", 4);
             info.description = item.value("description", "");
-            // midi_bytes not included in list — fetched separately on demand
+            // midi_bytes not loaded in list view — fetched on demand via GetMidi()
             out.push_back(std::move(info));
         }
     } catch (...) {}

@@ -4,6 +4,11 @@ cd "$(dirname "$0")"
 
 echo "==> Setting up LinkVST server..."
 
+# Install system deps (fluidsynth + GM soundfont for audio preview)
+if ! command -v fluidsynth &>/dev/null; then
+  sudo apt-get install -y fluidsynth fluid-soundfont-gm
+fi
+
 if [ ! -d server/venv ]; then
   python3 -m venv server/venv
 fi
