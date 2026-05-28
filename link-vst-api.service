@@ -1,0 +1,15 @@
+[Unit]
+Description=LinkVST API Server
+After=network.target
+
+[Service]
+Type=simple
+User=platform
+WorkingDirectory=/home/platform/link-vst
+EnvironmentFile=/home/platform/link-vst/server/.env
+ExecStart=/home/platform/link-vst/server/venv/bin/uvicorn server.main:app --host 127.0.0.1 --port 8002
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
