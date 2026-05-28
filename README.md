@@ -83,6 +83,9 @@ cmake --build build --config Release
 
 ## Roadmap
 
+- [x] Full HTTP client (libcurl + nlohmann/json, async generate/upload)
+- [x] macOS drag-out (`NSDraggingSession` + temp file cleanup)
+- [x] Windows drag-out (COM `IDataObject` / `IDropSource` + CF_HDROP)
 - [ ] Plugin UI polish (waveform preview, key/type filter dropdowns)
 - [ ] MIDI preview playback in-plugin before drag-out
 - [ ] Library browser panel with search/filter

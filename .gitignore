@@ -11,3 +11,4 @@ build/
 *.dylib
 *.vst3
 *.component
+server/.env.base

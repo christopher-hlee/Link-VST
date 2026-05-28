@@ -60,7 +60,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override {
     if (mIndex < (int)mPlug->GetGeneratedPhrases().size())
-      mPlug->BeginDragOut(mIndex);
+      mPlug->BeginDragOut(mIndex, x, y);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override {

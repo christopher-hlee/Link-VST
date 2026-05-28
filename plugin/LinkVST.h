@@ -35,8 +35,8 @@ public:
   void SavePhrase(int index);
   void DeletePhrase(int id);
 
-  // Drag-out: called when user starts drag on a phrase tile
-  void BeginDragOut(int phrase_index);
+  // Drag-out: called from UI with mouse coords and platform view pointer
+  void BeginDragOut(int phrase_index, float x, float y);
 
   const std::vector<PhraseInfo>& GetGeneratedPhrases() const { return mGeneratedPhrases; }
   const std::vector<PhraseInfo>& GetLibraryPhrases()   const { return mLibraryPhrases; }
@@ -54,6 +54,7 @@ private:
   void SetState(PluginState state, const std::string& msg = "");
   void RefreshLibrary();
 
-  // Platform drag-out implementation
-  void DoDragOut(const std::vector<uint8_t>& midi_bytes, const std::string& filename);
+  // Platform drag-out — implemented in DragOut_mac.mm / DragOut_win.cpp
+  void DoDragOut(const std::vector<uint8_t>& midi_bytes, const std::string& filename,
+                 void* platform_view, float x, float y);
 };
