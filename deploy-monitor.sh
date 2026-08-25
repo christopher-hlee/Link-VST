@@ -68,3 +68,14 @@ else
   echo "!! Health check failed. Logs: journalctl -u monitor-api -n 50 --no-pager"
   exit 1
 fi
+
+# The test suite mocks every HTTP call, so this is the first moment we learn
+# which platforms this server's IP can actually reach.
+echo
+echo "==> Probing live endpoints from this host"
+if ! ./verify-targets.sh; then
+  echo
+  echo "!! Shopify is unreachable from this IP. The service is running, but the"
+  echo "!! strategy the app depends on will fail. See the guidance above."
+  exit 1
+fi

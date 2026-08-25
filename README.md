@@ -53,8 +53,18 @@ as a `failing` watch with the HTTP status, not as a silent wrong answer.
 
 ```bash
 ./harden-server.sh          # once, as root, on a fresh VPS — key-only SSH, ufw, fail2ban
+./verify-targets.sh         # which platforms can this IP actually reach?
 ./deploy-monitor.sh         # venv, systemd unit, Caddy + TLS
 ```
+
+`verify-targets.sh` is worth running before anything else and is worth trusting
+over the test suite. Every test here mocks HTTP, so until this runs from the
+server itself, which strategies work from that IP is unknown — and a datacenter
+IP being refused by retailer bot protection is invisible from a laptop. It exits
+non-zero only when **Shopify** fails, since that's the strategy the project
+depends on; Target and Best Buy being blocked is a known-possible outcome and
+prints guidance instead of failing the run. `deploy-monitor.sh` runs it too,
+after the health check.
 
 `deploy-monitor.sh` stops and tells you what's missing until `monitor/.env` is
 complete. Generate the dashboard credentials on the server:
