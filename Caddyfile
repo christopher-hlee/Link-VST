@@ -1,0 +1,25 @@
+# Caddy fetches and renews the Let's Encrypt certificate automatically.
+# To move to your own domain: add an A record pointing at 74.208.54.100 and
+# replace the hostname below. Nothing else changes.
+
+0iu6eih.cserverhost.cloud {
+	encode zstd gzip
+
+	# Uvicorn binds 127.0.0.1 only — Caddy is the sole public entry point.
+	reverse_proxy 127.0.0.1:8003
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/monitor.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
