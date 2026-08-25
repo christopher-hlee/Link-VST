@@ -12,6 +12,14 @@ A MIDI taste-modeling VST3/AU plugin that learns your melodic preferences from u
 
 Your library (both uploads and saved generations) persists across sessions in a local SQLite database.
 
+## Companion app: Restock Monitor
+
+The repo also hosts a second, independent FastAPI service in `monitor/` — a
+product drop and restock watcher that alerts over Telegram. It shares this
+repo and the same server (port 8003) but no code with the plugin.
+
+See [monitor/README.md](monitor/README.md).
+
 ## Architecture
 
 ```

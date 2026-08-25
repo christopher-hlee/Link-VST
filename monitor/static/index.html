@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restock Monitor</title>
+<style>
+:root{
+  --bg:#0d0e1a; --surface:#141526; --card:#1a1b2e; --card-h:#1f2038;
+  --border:#252640; --border-h:#3a3b60;
+  --accent:#7c3aed; --accent-l:#a78bfa;
+  --green:#22c55e; --green-d:#14532d;
+  --red:#ef4444; --red-d:#4c1d1d;
+  --amber:#f59e0b; --amber-d:#4a3208;
+  --blue:#38bdf8;
+  --text:#e2e8f0; --muted:#64748b;
+  --mono:'Fira Mono','SF Mono',Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;
+  min-height:100vh;-webkit-font-smoothing:antialiased}
+
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);
+  position:sticky;top:0;z-index:50;flex-wrap:wrap}
+.logo{font-size:1.05rem;font-weight:700;letter-spacing:.5px;color:var(--accent-l)}
+.logo span{color:var(--muted);font-weight:400;font-size:.85rem;margin-left:6px}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.stat{font-size:.72rem;color:var(--muted);background:var(--card);border:1px solid var(--border);
+  border-radius:20px;padding:4px 12px;white-space:nowrap}
+.stat b{color:var(--text);font-weight:600}
+.stat.on b{color:var(--green)} .stat.bad b{color:var(--red)} .stat.hot b{color:var(--amber)}
+
+main{max-width:1240px;margin:0 auto;padding:20px 24px 60px}
+.bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+input,select,button{font:inherit;border-radius:8px;border:1px solid var(--border);
+  background:var(--card);color:var(--text);padding:9px 12px;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+input[type=text],input[type=url],input[type=password]{flex:1;min-width:220px}
+button{cursor:pointer;background:var(--card-h);transition:.15s}
+button:hover:not(:disabled){border-color:var(--border-h);background:var(--border)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover:not(:disabled){background:var(--accent-l);border-color:var(--accent-l)}
+button.danger:hover{border-color:var(--red);color:var(--red)}
+.sm{padding:5px 9px;font-size:.76rem;border-radius:6px}
+
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);
+  margin:28px 0 12px;font-weight:600}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px;display:flex;flex-direction:column;gap:9px;position:relative;
+  border-left-width:3px}
+.card:hover{background:var(--card-h)}
+.card.in_stock{border-left-color:var(--green)}
+.card.out_of_stock{border-left-color:var(--border-h)}
+.card.unknown{border-left-color:var(--muted)}
+.card.failing{border-left-color:var(--red)}
+.card.disabled{opacity:.5}
+.ctop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.brand{font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.pname{font-weight:600;font-size:.95rem;line-height:1.3;word-break:break-word}
+.price{font-family:var(--mono);font-size:.85rem;color:var(--accent-l);white-space:nowrap}
+
+/* Status uses an icon AND a word — never colour alone. */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;font-weight:700;
+  letter-spacing:.5px;padding:3px 9px;border-radius:5px;border:1px solid;white-space:nowrap}
+.badge.in_stock{color:var(--green);border-color:var(--green);background:var(--green-d)}
+.badge.out_of_stock{color:var(--muted);border-color:var(--border-h);background:transparent}
+.badge.unknown{color:var(--blue);border-color:var(--blue);background:transparent}
+.badge.failing{color:var(--red);border-color:var(--red);background:var(--red-d)}
+.badge.armed{color:var(--amber);border-color:var(--amber);background:var(--amber-d)}
+
+.meta{display:flex;gap:10px;flex-wrap:wrap;font-size:.7rem;color:var(--muted);
+  font-family:var(--mono)}
+.err{font-size:.7rem;color:var(--red);font-family:var(--mono);word-break:break-all;
+  background:var(--red-d);padding:5px 7px;border-radius:5px}
+.actions{display:flex;gap:5px;flex-wrap:wrap;margin-top:2px}
+
+.feed{display:flex;flex-direction:column;gap:7px}
+.ev{display:flex;gap:10px;align-items:flex-start;background:var(--card);
+  border:1px solid var(--border);border-left:3px solid var(--border-h);
+  border-radius:8px;padding:9px 12px;font-size:.83rem}
+.ev.restock,.ev.new_product{border-left-color:var(--green)}
+.ev.watch_failing{border-left-color:var(--red)}
+.ev.watch_recovered{border-left-color:var(--blue)}
+.ev.price_drop{border-left-color:var(--amber)}
+.ev time{margin-left:auto;font-size:.7rem;color:var(--muted);font-family:var(--mono);
+  white-space:nowrap}
+
+.empty{color:var(--muted);font-size:.87rem;padding:28px;text-align:center;
+  border:1px dashed var(--border);border-radius:12px}
+.note{font-size:.78rem;color:var(--muted);margin-top:6px}
+.warn{background:var(--amber-d);border:1px solid var(--amber);color:#fde68a;
+  padding:10px 14px;border-radius:8px;font-size:.83rem;margin-bottom:16px}
+
+.overlay{position:fixed;inset:0;background:rgba(6,7,15,.88);display:flex;
+  align-items:center;justify-content:center;z-index:100;padding:20px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:26px;width:100%;max-width:520px;max-height:86vh;overflow:auto}
+.panel h3{margin-bottom:14px;font-size:1.05rem}
+.row{display:flex;gap:8px;margin-top:10px}
+.hide{display:none!important}
+table{width:100%;border-collapse:collapse;font-size:.76rem;font-family:var(--mono)}
+td,th{padding:5px 7px;border-bottom:1px solid var(--border);text-align:left}
+th{color:var(--muted);font-weight:600}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:200;
+  background:var(--card-h);border:1px solid var(--border-h);border-radius:8px;
+  padding:11px 18px;font-size:.85rem;max-width:90vw}
+.toast.bad{border-color:var(--red);color:#fca5a5}
+.toast.good{border-color:var(--green);color:#86efac}
+</style>
+</head>
+<body>
+
+<div id="login" class="overlay hide">
+  <div class="panel" style="max-width:400px">
+    <h3>Restock Monitor</h3>
+    <p class="note" id="loginNote">Enter your dashboard password.</p>
+    <div class="row">
+      <input type="password" id="pw" placeholder="Password" autocomplete="current-password">
+      <button class="primary" onclick="doLogin()">Sign in</button>
+    </div>
+    <p class="note" id="loginErr" style="color:var(--red)"></p>
+  </div>
+</div>
+
+<div class="header">
+  <div class="logo">RESTOCK<span>monitor</span></div>
+  <div class="stats" id="stats"></div>
+  <div style="display:flex;gap:6px">
+    <button class="sm" onclick="testAlert()">Test Telegram</button>
+    <button class="sm" onclick="refresh()">Refresh</button>
+    <button class="sm" onclick="doLogout()">Sign out</button>
+  </div>
+</div>
+
+<main id="app" class="hide">
+  <div id="warnings"></div>
+
+  <div class="bar">
+    <input type="url" id="addUrl" placeholder="Paste a product or collection URL — the platform is detected automatically">
+    <select id="addTier">
+      <option value="base">Every 5 min</option>
+      <option value="slow">Every 15 min</option>
+      <option value="fast">Every 45 s</option>
+    </select>
+    <button class="primary" id="addBtn" onclick="addWatch()">Add watch</button>
+  </div>
+  <div id="detectNote"></div>
+
+  <h2>Watches</h2>
+  <div class="grid" id="grid"></div>
+
+  <h2>Recent alerts</h2>
+  <div class="feed" id="feed"></div>
+</main>
+
+<div id="detail" class="overlay hide" onclick="if(event.target===this)close_('detail')">
+  <div class="panel"><div id="detailBody"></div></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let WATCHES = [], TIMER = null;
+
+function toast(msg, kind='') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4200);
+}
+const close_ = id => $(id).classList.add('hide');
+
+async function api(path, opts = {}) {
+  const res = await fetch('/api' + path, {
+    headers: {'Content-Type': 'application/json'}, ...opts
+  });
+  if (res.status === 401) { showLogin(); throw new Error('Not authenticated'); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+  return body;
+}
+
+// ---------- auth ----------
+function showLogin(note) {
+  $('login').classList.remove('hide');
+  $('app').classList.add('hide');
+  if (note) $('loginNote').textContent = note;
+  clearInterval(TIMER);
+}
+
+async function doLogin() {
+  $('loginErr').textContent = '';
+  try {
+    await api('/login', {method: 'POST', body: JSON.stringify({password: $('pw').value})});
+    $('pw').value = '';
+    close_('login');
+    start();
+  } catch (e) { $('loginErr').textContent = e.message; }
+}
+
+async function doLogout() {
+  await api('/logout', {method: 'POST'}).catch(() => {});
+  showLogin('Signed out.');
+}
+
+// ---------- rendering ----------
+const ICON = {in_stock: '●', out_of_stock: '○', unknown: '◐', failing: '✕', armed: '⚡'};
+const LABEL = {in_stock: 'IN STOCK', out_of_stock: 'SOLD OUT', unknown: 'NO BASELINE',
+               failing: 'FAILING', armed: 'ARMED'};
+
+function badge(kind) {
+  return `<span class="badge ${kind}">${ICON[kind]} ${LABEL[kind]}</span>`;
+}
+
+const isArmed = w => w.hot_until && new Date(w.hot_until.replace(' ', 'T') + 'Z') > new Date();
+const isFailing = w => (w.consecutive_failures || 0) >= 5;
+
+function ago(ts) {
+  if (!ts) return 'never';
+  const secs = (Date.now() - new Date(ts.replace(' ', 'T') + 'Z')) / 1000;
+  if (secs < 60) return Math.max(0, Math.round(secs)) + 's ago';
+  if (secs < 3600) return Math.round(secs / 60) + 'm ago';
+  if (secs < 86400) return Math.round(secs / 3600) + 'h ago';
+  return Math.round(secs / 86400) + 'd ago';
+}
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function renderStats(s) {
+  $('stats').innerHTML = `
+    <div class="stat"><b>${s.enabled}</b> active</div>
+    <div class="stat on"><b>${s.in_stock}</b> in stock</div>
+    <div class="stat hot"><b>${s.armed}</b> armed</div>
+    <div class="stat bad"><b>${s.failing}</b> failing</div>`;
+}
+
+function renderGrid(watches) {
+  if (!watches.length) {
+    $('grid').innerHTML = `<div class="empty">No watches yet. Paste a product URL above —
+      try a Shopify store like Satisfy, Option-O, or Tracksmith.</div>`;
+    return;
+  }
+  $('grid').innerHTML = watches.map(w => {
+    const failing = isFailing(w), armed = isArmed(w);
+    // A failing watch is shown as failing, not as its stale stock state —
+    // conflating the two is the bug this whole app is built to avoid.
+    const state = failing ? 'failing' : (w.last_state || 'unknown');
+    return `
+    <div class="card ${state} ${w.enabled ? '' : 'disabled'}">
+      <div class="ctop">
+        <div>
+          <div class="brand">${esc(w.brand || '—')}</div>
+          <div class="pname">${esc(w.last_title || w.name)}</div>
+        </div>
+        ${w.last_price != null ? `<div class="price">$${w.last_price}</div>` : ''}
+      </div>
+      <div>${badge(state)} ${armed ? badge('armed') : ''}</div>
+      <div class="meta">
+        <span>${esc(w.strategy)}/${esc(w.kind)}</span>
+        <span>every ${Math.round((armed ? w.hot_interval_s : w.base_interval_s) / 60 * 10) / 10}m</span>
+        <span>checked ${ago(w.last_checked_at)}</span>
+      </div>
+      ${failing ? `<div class="err">${esc(w.last_error || 'unknown error')}
+         (${w.consecutive_failures} fails) — stock state is stale</div>` : ''}
+      <div class="actions">
+        <button class="sm" onclick="detail(${w.id})">Details</button>
+        <button class="sm" onclick="checkNow(${w.id},this)">Check now</button>
+        ${armed ? `<button class="sm" onclick="disarm(${w.id})">Disarm</button>`
+                : `<button class="sm" onclick="arm(${w.id})">Arm 1h</button>`}
+        <button class="sm" onclick="toggle(${w.id},${w.enabled ? 0 : 1})">
+          ${w.enabled ? 'Pause' : 'Resume'}</button>
+        <button class="sm danger" onclick="del(${w.id})">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderFeed(events) {
+  if (!events.length) {
+    $('feed').innerHTML = `<div class="empty">No alerts yet.</div>`;
+    return;
+  }
+  $('feed').innerHTML = events.map(e => {
+    const p = e.payload || {};
+    let text = `<b>${esc(e.kind.replace(/_/g, ' ').toUpperCase())}</b> —
+                ${esc(e.watch_brand || '')} ${esc(p.title || e.watch_name || '')}`;
+    if (e.kind === 'new_product' && p.handles) text += ` (${p.handles.length} new)`;
+    if (e.notify_error) text += ` <span style="color:var(--red)">· delivery failed:
+                                  ${esc(e.notify_error)}</span>`;
+    return `<div class="ev ${e.kind}"><div>${text}</div>
+            <time>${ago(e.created_at)}</time></div>`;
+  }).join('');
+}
+
+// ---------- actions ----------
+async function refresh() {
+  try {
+    const [w, e] = await Promise.all([api('/watches'), api('/events?limit=40')]);
+    WATCHES = w.watches;
+    renderStats(w.summary);
+    renderGrid(w.watches);
+    renderFeed(e.events);
+  } catch (err) { /* 401 already handled */ }
+}
+
+async function addWatch() {
+  const url = $('addUrl').value.trim();
+  if (!url) return;
+  $('addBtn').disabled = true;
+  $('detectNote').innerHTML = `<p class="note">Detecting platform…</p>`;
+  try {
+    const res = await api('/watches', {
+      method: 'POST',
+      body: JSON.stringify({url, tier: $('addTier').value})
+    });
+    const w = res.watch;
+    $('addUrl').value = '';
+    $('detectNote').innerHTML =
+      `<p class="note">Added <b>${esc(w.name)}</b> via <b>${esc(w.strategy)}</b>
+       (${esc(w.kind)}). First check runs within 15s.</p>`;
+    refresh();
+  } catch (e) {
+    $('detectNote').innerHTML = `<div class="warn">${esc(e.message)}</div>`;
+  } finally { $('addBtn').disabled = false; }
+}
+
+async function checkNow(id, btn) {
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const r = await api(`/watches/${id}/check`, {method: 'POST'});
+    const w = r.watch;
+    toast(isFailing(w) ? `Failed: ${w.last_error}` : `Now: ${LABEL[w.last_state]}`,
+          isFailing(w) ? 'bad' : 'good');
+    refresh();
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { btn.disabled = false; btn.textContent = 'Check now'; }
+}
+
+const arm = id => api(`/watches/${id}/arm`, {method: 'POST',
+  body: JSON.stringify({minutes: 60})}).then(refresh);
+const disarm = id => api(`/watches/${id}/disarm`, {method: 'POST'}).then(refresh);
+const toggle = (id, on) => api(`/watches/${id}`, {method: 'PATCH',
+  body: JSON.stringify({enabled: !!on})}).then(refresh);
+
+function del(id) {
+  const w = WATCHES.find(x => x.id === id);
+  if (!confirm(`Delete "${w ? w.name : id}"? Its history goes too.`)) return;
+  api(`/watches/${id}`, {method: 'DELETE'}).then(refresh);
+}
+
+async function detail(id) {
+  const {watch: w, checks} = await api(`/watches/${id}`);
+  $('detailBody').innerHTML = `
+    <h3>${esc(w.last_title || w.name)}</h3>
+    <p class="note"><a href="${esc(w.url)}" target="_blank" rel="noopener"
+       style="color:var(--accent-l)">${esc(w.url)}</a></p>
+    <div style="margin:14px 0">${badge(isFailing(w) ? 'failing' : w.last_state)}
+      ${isArmed(w) ? badge('armed') : ''}</div>
+    <table>
+      <tr><th>Strategy</th><td>${esc(w.strategy)} / ${esc(w.kind)}</td></tr>
+      <tr><th>Ref</th><td>${esc(w.target_ref || '—')}</td></tr>
+      <tr><th>Store ref</th><td>${esc(w.store_ref || '—')}</td></tr>
+      <tr><th>Interval</th><td>${w.base_interval_s}s (hot ${w.hot_interval_s}s)</td></tr>
+      <tr><th>Next check</th><td>${esc(w.next_check_at || '—')}</td></tr>
+      <tr><th>Failures</th><td>${w.consecutive_failures}</td></tr>
+      <tr><th>Last error</th><td>${esc(w.last_error || '—')}</td></tr>
+    </table>
+    <h2>Last ${checks.length} checks</h2>
+    <table><tr><th>When</th><th>OK</th><th>HTTP</th><th>State</th><th>Error</th></tr>
+    ${checks.map(c => `<tr>
+        <td>${ago(c.checked_at)}</td>
+        <td style="color:${c.ok ? 'var(--green)' : 'var(--red)'}">${c.ok ? '✓' : '✕'}</td>
+        <td>${c.http_status ?? '—'}</td><td>${esc(c.state || '—')}</td>
+        <td>${esc((c.error || '').slice(0, 40))}</td></tr>`).join('')}
+    </table>
+    <div class="row"><button onclick="close_('detail')">Close</button></div>`;
+  $('detail').classList.remove('hide');
+}
+
+async function testAlert() {
+  try { await api('/test-alert', {method: 'POST'}); toast('Sent — check Telegram.', 'good'); }
+  catch (e) { toast(e.message, 'bad'); }
+}
+
+// ---------- boot ----------
+async function start() {
+  const me = await api('/me');
+  if (!me.auth_configured) {
+    showLogin('Auth is not set up yet. On the server run `python -m monitor.hashpw` ' +
+              'and paste both lines into monitor/.env, then restart.');
+    return;
+  }
+  if (!me.authenticated) { showLogin(); return; }
+
+  close_('login');
+  $('app').classList.remove('hide');
+  $('warnings').innerHTML = me.telegram_configured ? '' :
+    `<div class="warn">Telegram is not configured — alerts will be recorded but not
+     delivered. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in monitor/.env.</div>`;
+  await refresh();
+  clearInterval(TIMER);
+  TIMER = setInterval(refresh, 10000);
+}
+
+$('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+$('addUrl').addEventListener('keydown', e => { if (e.key === 'Enter') addWatch(); });
+start();
+</script>
+</body>
+</html>

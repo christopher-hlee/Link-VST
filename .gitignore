@@ -12,3 +12,8 @@ build/
 *.vst3
 *.component
 server/.env.base
+
+# monitor app
+monitor/venv/
+monitor/.env
+monitor/data/

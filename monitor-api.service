@@ -1,0 +1,27 @@
+[Unit]
+Description=Restock Monitor API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=platform
+WorkingDirectory=/home/platform/link-vst
+EnvironmentFile=/home/platform/link-vst/monitor/.env
+ExecStart=/home/platform/link-vst/monitor/venv/bin/uvicorn monitor.main:app \
+          --host 127.0.0.1 --port 8003
+Restart=always
+RestartSec=5
+
+# Only reachable through Caddy on loopback, but narrow the blast radius anyway.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/platform/link-vst/monitor/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

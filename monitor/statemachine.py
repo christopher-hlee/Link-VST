@@ -1,0 +1,174 @@
+"""Pure state-transition logic. No I/O — this is the part that must be right.
+
+The single most important rule: a failed check NEVER changes the recorded stock
+state. A 403, a timeout, or a parse failure means "we don't know", not "sold
+out". Conflating those is how monitors silently stop working while looking fine.
+"""
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+# Stock states. `error` is deliberately NOT one of them — see module docstring.
+UNKNOWN = "unknown"
+IN_STOCK = "in_stock"
+OUT_OF_STOCK = "out_of_stock"
+
+# Event kinds
+RESTOCK = "restock"
+NEW_PRODUCT = "new_product"
+PRICE_DROP = "price_drop"
+WATCH_FAILING = "watch_failing"
+WATCH_RECOVERED = "watch_recovered"
+
+WatchKind = Literal["product", "collection"]
+
+
+@dataclass
+class CheckResult:
+    """Outcome of one fetch+parse attempt."""
+    ok: bool
+    state: str | None = None            # IN_STOCK / OUT_OF_STOCK; None when not ok
+    price: float | None = None
+    title: str | None = None
+    product_url: str | None = None
+    cart_url: str | None = None
+    image: str | None = None
+    handles: list[str] | None = None    # collection watches only
+    http_status: int | None = None
+    error: str | None = None
+    etag: str | None = None
+    last_modified: str | None = None
+    not_modified: bool = False          # HTTP 304 — nothing changed
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Event:
+    kind: str
+    from_state: str | None = None
+    to_state: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Decision:
+    """What the caller should persist and send."""
+    state: str                          # new last_state (unchanged on failure)
+    failures: int
+    events: list[Event] = field(default_factory=list)
+    baseline: list[str] | None = None   # new handle baseline, collection watches
+    price: float | None = None
+
+
+def decide(
+    *,
+    kind: WatchKind,
+    prev_state: str,
+    prev_failures: int,
+    prev_baseline: list[str] | None,
+    prev_price: float | None,
+    result: CheckResult,
+    failure_threshold: int = 5,
+) -> Decision:
+    """Fold a check result into a new persisted state plus any events to fire."""
+    if not result.ok:
+        return _decide_failure(prev_state, prev_failures, prev_baseline,
+                               prev_price, result, failure_threshold)
+
+    events: list[Event] = []
+
+    # A watch that was in the failing state and now works is worth reporting —
+    # otherwise you never learn that the gap in coverage ended.
+    if prev_failures >= failure_threshold:
+        events.append(Event(kind=WATCH_RECOVERED, payload={
+            "after_failures": prev_failures,
+        }))
+
+    # HTTP 304: the server told us nothing changed. Keep everything as-is.
+    if result.not_modified:
+        return Decision(state=prev_state, failures=0, events=events,
+                        baseline=prev_baseline, price=prev_price)
+
+    if kind == "collection":
+        return _decide_collection(prev_state, prev_baseline, result, events)
+
+    return _decide_product(prev_state, prev_price, result, events)
+
+
+def _decide_failure(prev_state, prev_failures, prev_baseline, prev_price,
+                    result, failure_threshold) -> Decision:
+    failures = prev_failures + 1
+    events: list[Event] = []
+    # Alert exactly once, on the crossing, so a persistently broken watch does
+    # not generate an alert every single cycle.
+    if failures == failure_threshold:
+        events.append(Event(kind=WATCH_FAILING, payload={
+            "failures": failures,
+            "error": result.error,
+            "http_status": result.http_status,
+        }))
+    # prev_state is preserved verbatim. This is the rule that matters.
+    return Decision(state=prev_state, failures=failures, events=events,
+                    baseline=prev_baseline, price=prev_price)
+
+
+def _decide_product(prev_state, prev_price, result, events) -> Decision:
+    new_state = result.state or UNKNOWN
+
+    # Only a genuine out -> in transition is a restock. Coming from UNKNOWN just
+    # establishes the baseline: adding a watch for something already in stock
+    # should not immediately ping you.
+    if prev_state == OUT_OF_STOCK and new_state == IN_STOCK:
+        events.append(Event(kind=RESTOCK, from_state=prev_state,
+                            to_state=new_state, payload=_payload(result)))
+
+    if (prev_price is not None and result.price is not None
+            and result.price < prev_price):
+        events.append(Event(kind=PRICE_DROP, from_state=prev_state,
+                            to_state=new_state,
+                            payload={**_payload(result),
+                                     "old_price": prev_price,
+                                     "new_price": result.price}))
+
+    return Decision(state=new_state, failures=0, events=events,
+                    baseline=None,
+                    price=result.price if result.price is not None else prev_price)
+
+
+def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
+    handles = list(result.handles or [])
+
+    # First successful check just records what's there.
+    if prev_baseline is None:
+        return Decision(state=IN_STOCK if handles else OUT_OF_STOCK,
+                        failures=0, events=events, baseline=handles)
+
+    known = set(prev_baseline)
+    fresh = [h for h in handles if h not in known]
+    if fresh:
+        events.append(Event(kind=NEW_PRODUCT, from_state=prev_state,
+                            to_state=IN_STOCK,
+                            payload={**_payload(result), "handles": fresh}))
+
+    # Union, so a product briefly dropping out of the feed doesn't re-alert
+    # when it comes back.
+    return Decision(state=IN_STOCK if handles else OUT_OF_STOCK, failures=0,
+                    events=events, baseline=sorted(known | set(handles)))
+
+
+def _payload(result: CheckResult) -> dict[str, Any]:
+    return {
+        "title": result.title,
+        "price": result.price,
+        "product_url": result.product_url,
+        "cart_url": result.cart_url,
+        "image": result.image,
+        **result.extra,
+    }
+
+
+def next_interval(base_s: int, hot_s: int, hot_until_ts: float | None,
+                  now_ts: float) -> int:
+    """Hot tier while armed, base tier otherwise."""
+    if hot_until_ts is not None and hot_until_ts > now_ts:
+        return hot_s
+    return base_s
