@@ -41,6 +41,16 @@ INTERVAL_BASE = 300
 INTERVAL_HOT = 45
 JITTER_FRACTION = 0.20
 
+# Optional Cloudflare Worker egress proxy — see worker/README.md. Only hosts
+# listed in PROXY_HOSTS are routed through it; everything else goes direct.
+PROXY_URL = os.environ.get("PROXY_URL", "").rstrip("/")
+PROXY_KEY = os.environ.get("PROXY_KEY", "")
+PROXY_HOSTS = {
+    h.strip().lower()
+    for h in os.environ.get("PROXY_HOSTS", "").split(",")
+    if h.strip()
+}
+
 # Politeness
 PER_DOMAIN_CONCURRENCY = 2
 PER_DOMAIN_MIN_GAP = 1.0     # seconds between requests to the same host

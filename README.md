@@ -46,8 +46,15 @@ Auto-detected from the URL you paste — you never pick one.
   far less contested than online stock.
 - **`bestbuy`** — the official developer API. Needs a free `BESTBUY_API_KEY`.
 
+- **`announce`** — new entries in an Atom/RSS feed or a Shopify search endpoint,
+  filtered by keyword. This is the one that can track something with no product
+  page yet; everything else presupposes a URL to poll.
+
 Both retailer APIs are commonly refused from datacenter IP ranges. That surfaces
-as a `failing` watch with the HTTP status, not as a silent wrong answer.
+as a `failing` watch with the HTTP status, not as a silent wrong answer — and
+`worker/` contains an optional Cloudflare Worker that re-issues requests for
+specific hosts from Cloudflare's edge, giving the monitor a second network
+identity. Deploy it only once `verify-targets.sh` shows you need it.
 
 ## Setup
 
@@ -112,9 +119,18 @@ monitor/venv/bin/python -m pytest monitor/tests -c monitor/pytest.ini
 invariant, alert deduplication, the Atom fallback, and the full
 sold-out → restock → alert cycle against a temp database.
 
+## Alerting tiers
+
+Watches are `info` or `critical`. Everything goes to Telegram; critical also
+goes to ntfy at urgent priority, which unlike Telegram pierces Do Not Disturb.
+A watch that breaks escalates to critical regardless of its own setting, because
+a monitor that has stopped seeing the site is urgent however it was configured.
+
+The healthchecks.io heartbeat reports `/fail` when every check in a tick fails.
+A banned IP and a quiet market look identical from the outside, so a tick where
+nothing succeeded trips the same alarm as a crash.
+
 ## Not built yet
 
-Playwright for JS-rendered sites; a Cloudflare Worker as a second egress
-identity for retailers that block the VPS; the Zelda console watcher (no SKU
-exists yet — it needs an announcement watcher first). Auto-checkout is
-deliberately out of scope: this notifies, it doesn't buy.
+Playwright for JS-rendered sites. Auto-checkout is deliberately out of scope:
+this notifies, it doesn't buy.

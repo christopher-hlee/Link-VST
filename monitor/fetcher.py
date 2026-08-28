@@ -8,12 +8,13 @@ import logging
 import random
 import time
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
 from .config import (
-    PER_DOMAIN_CONCURRENCY, PER_DOMAIN_MIN_GAP, REQUEST_TIMEOUT, USER_AGENT,
+    PER_DOMAIN_CONCURRENCY, PER_DOMAIN_MIN_GAP, PROXY_HOSTS, PROXY_KEY,
+    PROXY_URL, REQUEST_TIMEOUT, USER_AGENT,
 )
 
 log = logging.getLogger("monitor.fetcher")
@@ -58,6 +59,21 @@ def limiter_for(url: str) -> DomainLimiter:
     if host not in _limiters:
         _limiters[host] = DomainLimiter(PER_DOMAIN_CONCURRENCY, PER_DOMAIN_MIN_GAP)
     return _limiters[host]
+
+
+def route(url: str) -> tuple[str, dict[str, str]]:
+    """Rewrite to the egress proxy when this host is configured for it.
+
+    Returns the URL to actually request plus any extra headers. Hosts not in
+    PROXY_HOSTS are returned untouched, so the proxy stays opt-in per host
+    rather than becoming a single point of failure for every request.
+    """
+    if not (PROXY_URL and PROXY_KEY):
+        return url, {}
+    host = urlparse(url).netloc.lower()
+    if host not in PROXY_HOSTS:
+        return url, {}
+    return f"{PROXY_URL}?url={quote(url, safe='')}", {"X-Proxy-Key": PROXY_KEY}
 
 
 def get_client() -> httpx.AsyncClient:
@@ -108,7 +124,14 @@ async def fetch(url: str, *, etag: str | None = None,
     if last_modified:
         req_headers["If-Modified-Since"] = last_modified
 
+    request_url, proxy_headers = route(url)
+    req_headers.update(proxy_headers)
+
     client = get_client()
+    # Deliberately keyed on the ORIGINAL host: the rate limit protects the
+    # retailer we are polling, not the proxy in front of it. Keying on the
+    # proxy would collapse every proxied host into one bucket and quietly
+    # discard the politeness that keeps us unbanned.
     limiter = limiter_for(url)
     started = time.monotonic()
     last_error = "unknown error"
@@ -117,7 +140,7 @@ async def fetch(url: str, *, etag: str | None = None,
     for attempt in range(retries + 1):
         try:
             async with limiter:
-                resp = await client.get(url, headers=req_headers)
+                resp = await client.get(request_url, headers=req_headers)
             latency = int((time.monotonic() - started) * 1000)
             last_status = resp.status_code
 

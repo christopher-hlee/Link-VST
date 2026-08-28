@@ -1,0 +1,12 @@
+name = "restock-monitor-proxy"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Hosts this proxy will fetch. Keep it minimal — every entry here is a host
+# anyone holding the key could make Cloudflare fetch on their behalf.
+# Subdomains are matched, so "target.com" covers "redsky.target.com".
+[vars]
+ALLOWED_HOSTS = "redsky.target.com,api.bestbuy.com"
+
+# PROXY_KEY is a secret, never a var. Set it with:
+#   wrangler secret put PROXY_KEY
