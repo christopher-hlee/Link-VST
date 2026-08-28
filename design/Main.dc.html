@@ -78,6 +78,10 @@
                    stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z"></path></svg>
               ARMED</span>
           </sc-if>
+          <sc-if value="{{r.not_armed}}" hint-placeholder-val="{{ true }}">
+            <span style="border:1px solid #1d2130; color:#4a5163; font-size:10px; font-weight:700;
+                         letter-spacing:.09em; padding:3px 6px">NORMAL</span>
+          </sc-if>
         </div>
         <div style="display:flex; gap:4px; justify-content:flex-end">
           <div class="t-act">DETAILS</div><div class="t-act">CHECK</div>
@@ -157,6 +161,7 @@ class Component extends DCLogic {
         fg: TONE[r.state].fg, bar: TONE[r.state].bar, bg: TONE[r.state].bg,
         name_fg: TONE[r.state].name, price_fg: TONE[r.state].price,
         every_fg: r.armed ? '#fbbf24' : '#4a5163',
+        not_armed: !r.armed,
         err: r.err || '',
       })),
       feed: FEED.map((f) => ({
