@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+    *, *::before, *::after { box-sizing:border-box; }
+    body { margin:0; background:#07080c;
+      font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+    a { color:#5eead4; } a:hover { color:#99f6e4; }
+    .t-row { display:grid; grid-template-columns:172px 1fr 116px 92px 74px 96px 168px;
+      align-items:center; gap:14px; padding:9px 16px 9px 13px;
+      border-bottom:1px solid #14161f; border-left:3px solid transparent; }
+    .t-act { border:1px solid #232733; background:#0d0f16; color:#7c8598;
+      font:500 10px/1 'IBM Plex Mono', monospace; padding:5px 7px; letter-spacing:.06em; }
+  </style>
+</helmet>
+<div style="min-height:1240px; background:#07080c; color:#c7cedb; padding:20px 22px 26px;
+            display:flex; flex-direction:column; gap:16px">
+
+  <div style="display:flex; align-items:baseline; gap:16px; flex-wrap:wrap">
+    <div style="font-size:17px; font-weight:700; letter-spacing:.16em; color:#5eead4">RESTOCK</div>
+    <div style="font-size:11px; letter-spacing:.14em; color:#4a5163">MONITOR · 74.208.54.100</div>
+    <div style="margin-left:auto; display:flex; gap:7px">
+      <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+        <div style="border:1px solid #1d2130; background:#0c0e15; padding:5px 11px;
+                    font-size:11px; letter-spacing:.08em; color:#5b6478">
+          <span style="color: {{s.tone}}; font-weight:700">{{s.n}}</span> {{s.label}}
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:8px">
+    <div style="flex:1; border:1px solid #1d2130; background:#0c0e15; padding:9px 12px;
+                font-size:12px; color:#3f4657">https://…  paste a product, collection or feed URL</div>
+    <div style="border:1px solid #1d2130; background:#0c0e15; padding:9px 12px; font-size:12px; color:#7c8598">EVERY 5M ▾</div>
+    <div style="border:1px solid #1d2130; background:#0c0e15; padding:9px 12px; font-size:12px; color:#7c8598">NORMAL ▾</div>
+    <div style="border:1px solid #5eead4; background:#0d1f1d; color:#5eead4; padding:9px 16px;
+                font-size:12px; font-weight:600; letter-spacing:.08em">ADD WATCH</div>
+  </div>
+
+  <div style="border:1px solid #14161f; background:#0a0c11; overflow-x:auto">
+    <div class="t-row" style="border-left-color:transparent; border-bottom:1px solid #1d2130;
+                              color:#3f4657; font-size:10px; letter-spacing:.14em; padding-top:11px; padding-bottom:11px">
+      <div>STATE</div><div>PRODUCT</div><div>PRICE</div><div>CHECKED</div><div>EVERY</div><div>MODE</div><div></div>
+    </div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="12">
+      <div class="t-row" style="border-left-color: {{r.bar}}; background: {{r.bg}}">
+        <div style="display:flex; align-items:center; gap:7px; color: {{r.fg}}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{r.icon}}"></path>
+          </svg>
+          <span style="font-size:11px; font-weight:700; letter-spacing:.09em">{{r.word}}</span>
+        </div>
+        <div style="min-width:0">
+          <div style="font-size:9px; letter-spacing:.16em; color:#4a5163">{{r.brand}}</div>
+          <div style="font-size:13px; color: {{r.name_fg}}; white-space:nowrap;
+                      overflow:hidden; text-overflow:ellipsis">{{r.name}}</div>
+          <sc-if value="{{r.err}}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:3px; font-size:10px; color:#fb7185">↳ {{r.err}} · state below is stale</div>
+          </sc-if>
+        </div>
+        <div style="font-size:12px; color: {{r.price_fg}}">{{r.price}}</div>
+        <div style="font-size:11px; color:#4a5163">{{r.checked}} ago</div>
+        <div style="font-size:11px; color: {{r.every_fg}}">{{r.every}}</div>
+        <div>
+          <sc-if value="{{r.armed}}" hint-placeholder-val="{{ true }}">
+            <span style="display:inline-flex; align-items:center; gap:4px; border:1px solid #f59e0b;
+                         color:#fbbf24; font-size:10px; font-weight:700; letter-spacing:.09em; padding:3px 6px">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                   stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z"></path></svg>
+              ARMED</span>
+          </sc-if>
+        </div>
+        <div style="display:flex; gap:4px; justify-content:flex-end">
+          <div class="t-act">DETAILS</div><div class="t-act">CHECK</div>
+          <div class="t-act">ARM 1H</div><div class="t-act">⋯</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div>
+    <div style="font-size:10px; letter-spacing:.18em; color:#3f4657; margin-bottom:8px">RECENT ALERTS</div>
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <sc-for list="{{feed}}" as="f" hint-placeholder-count="5">
+        <div style="display:flex; align-items:center; gap:12px; border:1px solid #14161f;
+                    border-left:3px solid {{f.tone}}; background:#0a0c11; padding:8px 12px; font-size:12px">
+          <span style="color: {{f.tone}}; font-weight:700; letter-spacing:.09em; font-size:11px; min-width:88px">{{f.kind}}</span>
+          <span style="color:#8b93a5">{{f.who}}</span>
+          <span style="margin-left:auto; color:#3f4657; font-size:11px">{{f.when}} ago</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1280,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Shared sample data — pasted into each artboard, since artboards share nothing.
+    const ICON = {
+      in_stock:    'M12 3a9 9 0 100 18 9 9 0 000-18z M8 12l2.6 2.6L16 9',
+      sold_out:    'M12 3a9 9 0 100 18 9 9 0 000-18z',
+      failing:     'M12 3a9 9 0 100 18 9 9 0 000-18z M9.2 9.2l5.6 5.6 M14.8 9.2l-5.6 5.6',
+      no_baseline: 'M12 3a9 9 0 100 18 9 9 0 000-18z M12 7.6v5.2 M12 16.2v.01',
+      armed:       'M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z',
+    };
+    const WORD = {
+      in_stock: 'IN STOCK', sold_out: 'SOLD OUT',
+      failing: 'FAILING', no_baseline: 'NO BASELINE',
+    };
+    const ROWS = [
+      {brand:'SATISFY',    name:'Justice Short 8″',        price:'$185',   checked:'12s', every:'45s', state:'in_stock',    armed:true},
+      {brand:'OPTION-O',   name:'Omni Grinder',                 price:'$395',   checked:'41s', every:'5m',  state:'in_stock',    armed:false},
+      {brand:'NORDA',      name:'001 Trail',                    price:'$285',   checked:'1m',  every:'5m',  state:'in_stock',    armed:false},
+      {brand:'TARGET',     name:'Zelda 40th Switch 2',          price:'—', checked:'2m',  every:'45s', state:'failing',     armed:true,  err:'HTTP 403 — RedSky refused this IP'},
+      {brand:'BEST BUY',   name:'Zelda Switch 2 bundle',        price:'—', checked:'4m',  every:'5m',  state:'failing',     armed:false, err:'BESTBUY_API_KEY is not set'},
+      {brand:'NINTENDO',   name:'News feed · “zelda, switch 2”', price:'—', checked:'3m', every:'15m', state:'no_baseline', armed:false},
+      {brand:'CAFELAT',    name:'Robot Barista',                price:'$415',   checked:'2m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'PRIMA',      name:'Cafelat Robot',                price:'$425',   checked:'2m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'ONYX',       name:'Ninety Plus Gesha',            price:'$58',    checked:'3m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'SEY',        name:'Gesha · Ethiopia',        price:'$42',    checked:'3m',  every:'15m', state:'sold_out',    armed:false},
+      {brand:'TRACKSMITH', name:'Session Shorts',               price:'$88',    checked:'4m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'WEBER',      name:'Key Grinder',                  price:'$1,590', checked:'5m',  every:'15m', state:'sold_out',    armed:false},
+    ];
+    const FEED = [
+      {kind:'RESTOCK',   who:'Option-O · Omni Grinder',       when:'41s'},
+      {kind:'NEW DROP',  who:'Satisfy · 3 new items',         when:'12s'},
+      {kind:'FAILING',   who:'Target · Zelda 40th Switch 2',  when:'2m'},
+      {kind:'RESTOCK',   who:'Norda · 001 Trail',             when:'1m'},
+      {kind:'RECOVERED', who:'Sey · Gesha',                   when:'21m'},
+    ];
+    const TONE = {
+      in_stock:    {fg:'#34d399', bar:'#34d399', bg:'rgba(52,211,153,0.055)', name:'#e8eef7', price:'#34d399'},
+      sold_out:    {fg:'#525a6b', bar:'transparent', bg:'transparent',        name:'#8b93a5', price:'#5b6478'},
+      failing:     {fg:'#fb7185', bar:'#fb7185', bg:'rgba(251,113,133,0.06)', name:'#e8eef7', price:'#5b6478'},
+      no_baseline: {fg:'#60a5fa', bar:'#60a5fa', bg:'transparent',            name:'#c7cedb', price:'#5b6478'},
+    };
+    return {
+      stats: [
+        {n:'12', label:'ACTIVE',  tone:'#c7cedb'},
+        {n:'3',  label:'IN STOCK', tone:'#34d399'},
+        {n:'2',  label:'ARMED',   tone:'#fbbf24'},
+        {n:'2',  label:'FAILING', tone:'#fb7185'},
+      ],
+      rows: ROWS.map((r) => ({
+        ...r,
+        icon: ICON[r.state], word: WORD[r.state],
+        fg: TONE[r.state].fg, bar: TONE[r.state].bar, bg: TONE[r.state].bg,
+        name_fg: TONE[r.state].name, price_fg: TONE[r.state].price,
+        every_fg: r.armed ? '#fbbf24' : '#4a5163',
+        err: r.err || '',
+      })),
+      feed: FEED.map((f) => ({
+        ...f,
+        tone: f.kind === 'FAILING' ? '#fb7185'
+            : f.kind === 'RECOVERED' ? '#60a5fa' : '#34d399',
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

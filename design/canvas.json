@@ -1,0 +1,15 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",      "title": "A · Terminal",  "x": 0,    "y": 0,    "w": 1280, "h": 1240 },
+    { "file": "Editorial.dc.html", "title": "B · Editorial", "x": 1400, "y": 0,    "w": 1280, "h": 1400 },
+    { "file": "Brutalist.dc.html", "title": "C · Brutalist", "x": 0,    "y": 1540, "w": 1280, "h": 1310 },
+    { "file": "SoftSaaS.dc.html",  "title": "D · Soft SaaS", "x": 1400, "y": 1540, "w": 1280, "h": 1250 }
+  ],
+  "annotations": [
+    { "id": "brief", "x": 0, "y": -200, "w": 560,
+      "text": "Four takes on the same screen. Same twelve watches, same data, same five states.\n\nThe thing to judge: scan each one and find the FAILING cards. If your eye lands on them before the sold-out ones, the design works. A dead monitor and a quiet market look identical unless the design separates them." },
+    { "id": "states", "x": 1400, "y": -200, "w": 620,
+      "text": "States, in every flavor: IN STOCK (the win) · SOLD OUT (recedes) · ARMED (polling fast) · FAILING (broken, state is stale) · NO BASELINE (first check pending).\n\nEach is an icon AND a word, so it survives being read without color. Target and Best Buy are FAILING here; Target is also ARMED, to prove the two can stack." }
+  ],
+  "launch": { "view": "canvas" }
+}

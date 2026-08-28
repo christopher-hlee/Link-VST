@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&display=swap');
+    *, *::before, *::after { box-sizing:border-box; }
+    body { margin:0; background:#111; font-family:'Archivo', Helvetica, Arial, sans-serif; }
+    a { color:#ffe600; } a:hover { color:#fff480; }
+    .b-card { border:2px solid #fff; padding:0; display:flex; flex-direction:column; }
+    .b-act { border:2px solid #3a3a3a; color:#8a8a8a; font:700 10px/1 'Archivo',sans-serif;
+      letter-spacing:.09em; padding:6px 8px; text-transform:uppercase; }
+  </style>
+</helmet>
+<div style="min-height:1310px; background:#111; color:#fff; padding:24px; display:flex;
+            flex-direction:column; gap:20px">
+
+  <div style="border:2px solid #fff; display:flex; align-items:stretch; flex-wrap:wrap">
+    <div style="padding:16px 20px; border-right:2px solid #fff">
+      <div style="font-size:28px; font-weight:900; letter-spacing:-.02em; line-height:1">RESTOCK</div>
+      <div style="font-size:10px; font-weight:700; letter-spacing:.2em; margin-top:3px; color:#8a8a8a">MONITOR</div>
+    </div>
+    <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+      <div style="padding:16px 22px; border-right:2px solid #fff; background: {{s.bg}}; color: {{s.tone}}">
+        <div style="font-size:26px; font-weight:900; line-height:1">{{s.n}}</div>
+        <div style="font-size:9px; font-weight:700; letter-spacing:.18em; margin-top:3px">{{s.label}}</div>
+      </div>
+    </sc-for>
+    <div style="flex:1; min-width:180px"></div>
+  </div>
+
+  <div style="display:flex; gap:0; border:2px solid #fff">
+    <div style="flex:1; padding:12px 14px; font-size:13px; font-weight:500; color:#6a6a6a;
+                border-right:2px solid #fff">PASTE URL —</div>
+    <div style="padding:12px 14px; font-size:11px; font-weight:700; letter-spacing:.08em; border-right:2px solid #fff">EVERY 5M ▾</div>
+    <div style="padding:12px 14px; font-size:11px; font-weight:700; letter-spacing:.08em; border-right:2px solid #fff">NORMAL ▾</div>
+    <div style="padding:12px 22px; font-size:11px; font-weight:900; letter-spacing:.1em;
+                background:#ffe600; color:#111">ADD WATCH</div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px">
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="12">
+      <div class="b-card" style="border-color: {{r.border}}; background: {{r.bg}}">
+        <div style="display:flex; align-items:center; gap:7px; padding:9px 12px;
+                    background: {{r.chip_bg}}; color: {{r.fg}}; border-bottom:2px solid {{r.border}}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.icon}}"></path></svg>
+          <span style="font-size:11px; font-weight:900; letter-spacing:.13em">{{r.word}}</span>
+          <sc-if value="{{r.armed}}" hint-placeholder-val="{{ true }}">
+            <span style="margin-left:auto; display:inline-flex; align-items:center; gap:4px;
+                         background:#ffe600; color:#111; padding:2px 6px; font-size:9px;
+                         font-weight:900; letter-spacing:.12em">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z"></path></svg>ARMED</span>
+          </sc-if>
+        </div>
+        <div style="padding:12px; display:flex; flex-direction:column; gap:9px; flex:1">
+          <div>
+            <div style="font-size:9px; font-weight:700; letter-spacing:.2em; color:#7a7a7a">{{r.brand}}</div>
+            <div style="font-size:16px; font-weight:700; line-height:1.2; margin-top:3px;
+                        color: {{r.name_fg}}; text-wrap:pretty">{{r.name}}</div>
+          </div>
+          <sc-if value="{{r.err}}" hint-placeholder-val="{{ true }}">
+            <div style="background:#ff3b30; color:#fff; padding:7px 9px; font-size:10px;
+                        font-weight:700; line-height:1.4">{{r.err}}<br>STATE BELOW IS STALE</div>
+          </sc-if>
+          <div style="margin-top:auto; display:flex; align-items:baseline; gap:8px;
+                      border-top:2px solid #2a2a2a; padding-top:9px">
+            <span style="font-size:17px; font-weight:900; color: {{r.price_fg}}">{{r.price}}</span>
+            <span style="margin-left:auto; font-size:10px; font-weight:700; color:#6a6a6a;
+                         letter-spacing:.06em">{{r.checked}} · {{r.every}}</span>
+          </div>
+          <div style="display:flex; gap:5px; flex-wrap:wrap">
+            <div class="b-act">Details</div><div class="b-act">Check</div>
+            <div class="b-act">Arm</div><div class="b-act">Pause</div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="border:2px solid #fff">
+    <div style="font-size:10px; font-weight:900; letter-spacing:.2em; padding:10px 14px;
+                border-bottom:2px solid #fff; background:#fff; color:#111">RECENT ALERTS</div>
+    <sc-for list="{{feed}}" as="f" hint-placeholder-count="5">
+      <div style="display:flex; align-items:center; gap:14px; padding:10px 14px;
+                  border-bottom:1px solid #2a2a2a">
+        <span style="background: {{f.tone}}; color:#111; font-size:10px; font-weight:900;
+                     letter-spacing:.1em; padding:3px 8px; min-width:84px; text-align:center">{{f.kind}}</span>
+        <span style="font-size:13px; font-weight:500; color:#d0d0d0">{{f.who}}</span>
+        <span style="margin-left:auto; font-size:10px; font-weight:700; color:#6a6a6a">{{f.when}} AGO</span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1280,"height":1310}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Shared sample data — pasted into each artboard, since artboards share nothing.
+    const ICON = {
+      in_stock:    'M12 3a9 9 0 100 18 9 9 0 000-18z M8 12l2.6 2.6L16 9',
+      sold_out:    'M12 3a9 9 0 100 18 9 9 0 000-18z',
+      failing:     'M12 3a9 9 0 100 18 9 9 0 000-18z M9.2 9.2l5.6 5.6 M14.8 9.2l-5.6 5.6',
+      no_baseline: 'M12 3a9 9 0 100 18 9 9 0 000-18z M12 7.6v5.2 M12 16.2v.01',
+      armed:       'M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z',
+    };
+    const WORD = {
+      in_stock: 'IN STOCK', sold_out: 'SOLD OUT',
+      failing: 'FAILING', no_baseline: 'NO BASELINE',
+    };
+    const ROWS = [
+      {brand:'SATISFY',    name:'Justice Short 8″',        price:'$185',   checked:'12s', every:'45s', state:'in_stock',    armed:true},
+      {brand:'OPTION-O',   name:'Omni Grinder',                 price:'$395',   checked:'41s', every:'5m',  state:'in_stock',    armed:false},
+      {brand:'NORDA',      name:'001 Trail',                    price:'$285',   checked:'1m',  every:'5m',  state:'in_stock',    armed:false},
+      {brand:'TARGET',     name:'Zelda 40th Switch 2',          price:'—', checked:'2m',  every:'45s', state:'failing',     armed:true,  err:'HTTP 403 — RedSky refused this IP'},
+      {brand:'BEST BUY',   name:'Zelda Switch 2 bundle',        price:'—', checked:'4m',  every:'5m',  state:'failing',     armed:false, err:'BESTBUY_API_KEY is not set'},
+      {brand:'NINTENDO',   name:'News feed · “zelda, switch 2”', price:'—', checked:'3m', every:'15m', state:'no_baseline', armed:false},
+      {brand:'CAFELAT',    name:'Robot Barista',                price:'$415',   checked:'2m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'PRIMA',      name:'Cafelat Robot',                price:'$425',   checked:'2m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'ONYX',       name:'Ninety Plus Gesha',            price:'$58',    checked:'3m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'SEY',        name:'Gesha · Ethiopia',        price:'$42',    checked:'3m',  every:'15m', state:'sold_out',    armed:false},
+      {brand:'TRACKSMITH', name:'Session Shorts',               price:'$88',    checked:'4m',  every:'5m',  state:'sold_out',    armed:false},
+      {brand:'WEBER',      name:'Key Grinder',                  price:'$1,590', checked:'5m',  every:'15m', state:'sold_out',    armed:false},
+    ];
+    const FEED = [
+      {kind:'RESTOCK',   who:'Option-O · Omni Grinder',       when:'41s'},
+      {kind:'NEW DROP',  who:'Satisfy · 3 new items',         when:'12s'},
+      {kind:'FAILING',   who:'Target · Zelda 40th Switch 2',  when:'2m'},
+      {kind:'RESTOCK',   who:'Norda · 001 Trail',             when:'1m'},
+      {kind:'RECOVERED', who:'Sey · Gesha',                   when:'21m'},
+    ];
+    const TONE = {
+      in_stock:    {fg:'#111', bar:'#00e676', bg:'#161616', name:'#fff', price:'#00e676', chip:'#00e676', border:'#00e676'},
+      sold_out:    {fg:'#8a8a8a', bar:'#3a3a3a', bg:'#141414', name:'#9a9a9a', price:'#7a7a7a', chip:'#1c1c1c', border:'#3a3a3a'},
+      failing:     {fg:'#fff', bar:'#ff3b30', bg:'#181212', name:'#fff', price:'#7a7a7a', chip:'#ff3b30', border:'#ff3b30'},
+      no_baseline: {fg:'#111', bar:'#4dabf7', bg:'#141414', name:'#d0d0d0', price:'#7a7a7a', chip:'#4dabf7', border:'#4dabf7'},
+    };
+    return {
+      stats: [{n:'12',label:'ACTIVE',tone:'#fff',bg:'#111'},{n:'3',label:'IN STOCK',tone:'#111',bg:'#00e676'},{n:'2',label:'ARMED',tone:'#111',bg:'#ffe600'},{n:'2',label:'FAILING',tone:'#fff',bg:'#ff3b30'}],
+      rows: ROWS.map((r) => ({
+        ...r,
+        icon: ICON[r.state], word: WORD[r.state],
+        fg: TONE[r.state].fg, bar: TONE[r.state].bar, bg: TONE[r.state].bg,
+        name_fg: TONE[r.state].name, price_fg: TONE[r.state].price,
+        chip_bg: TONE[r.state].chip, border: TONE[r.state].border,
+        err: r.err || '',
+      })),
+      feed: FEED.map((f) => ({ ...f, tone: f.kind === 'FAILING' ? '#ff3b30' : f.kind === 'RECOVERED' ? '#4dabf7' : '#00e676' })),
+    };
+  }
+}
+</script>
+</body>
+</html>
