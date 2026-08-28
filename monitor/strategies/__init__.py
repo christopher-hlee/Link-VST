@@ -6,16 +6,19 @@ first; Shopify is the generic fallback because it's identified by probing
 endpoints rather than by domain.
 """
 from ..statemachine import CheckResult
-from . import bestbuy, shopify, target
+from . import announce, bestbuy, shopify, target
 
 REGISTRY = {
     shopify.NAME: shopify,
     target.NAME: target,
     bestbuy.NAME: bestbuy,
+    announce.NAME: announce,
 }
 
-# Hostname-matched strategies are cheap to rule out, so try them first.
-DETECT_ORDER = (target, bestbuy, shopify)
+# Hostname-matched strategies are cheap to rule out, so try them first. announce
+# precedes shopify because a store's /search URL would otherwise be claimed as a
+# collection watch by shopify's origin probe.
+DETECT_ORDER = (target, bestbuy, announce, shopify)
 
 
 async def check(watch: dict) -> CheckResult:

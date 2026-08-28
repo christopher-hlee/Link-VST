@@ -34,8 +34,16 @@ def product_handle(url: str) -> str | None:
 
 
 def collection_handle(url: str) -> str | None:
+    """Collection name, with any feed suffix stripped.
+
+    `/collections/all.atom` names the collection `all` served as a feed — not a
+    collection called `all.atom`. Keeping the suffix sends every later request
+    to `/collections/all.atom/products.json`, which 404s forever.
+    """
     m = _COLLECTION_RE.search(urlparse(url).path)
-    return m.group(1) if m else None
+    if not m:
+        return None
+    return re.sub(r"\.(atom|rss|json|xml)$", "", m.group(1), flags=re.I)
 
 
 def cart_url(base: str, variant_id) -> str:

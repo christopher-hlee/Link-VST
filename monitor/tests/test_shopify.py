@@ -189,5 +189,21 @@ def test_product_handle_extraction(url, expected):
     assert shopify.product_handle(url) == expected
 
 
+@pytest.mark.parametrize("url,expected", [
+    (f"{STORE}/collections/shop-new-arrivals", "shop-new-arrivals"),
+    (f"{STORE}/collections/all.atom", "all"),
+    (f"{STORE}/collections/all.rss", "all"),
+    (f"{STORE}/collections/new/products.json", "new"),
+    (f"{STORE}/products/x", None),
+])
+def test_collection_handle_strips_feed_suffixes(url, expected):
+    """`/collections/all.atom` is the collection `all`, served as a feed.
+
+    Keeping the suffix pointed every later request at
+    /collections/all.atom/products.json, which 404s forever.
+    """
+    assert shopify.collection_handle(url) == expected
+
+
 def test_cart_permalink_shape():
     assert shopify.cart_url(STORE, 222) == f"{STORE}/cart/222:1"
