@@ -17,8 +17,8 @@ from .config import (
     ALERT_COOLDOWN_SECONDS, FAILURE_ALERT_THRESHOLD, JITTER_FRACTION,
     MAX_CONCURRENT_CHECKS, TICK_SECONDS,
 )
-from .notify import heartbeat, telegram
-from .statemachine import PRICE_DROP, decide, next_interval
+from .notify import heartbeat, ntfy, telegram
+from .statemachine import PRICE_DROP, WATCH_FAILING, decide, next_interval
 from .timeutil import is_future, parse, seconds_since, stamp, stamp_in, utcnow
 
 log = logging.getLogger("monitor.scheduler")
@@ -37,8 +37,12 @@ def jittered(seconds: int) -> float:
     return seconds * (1.0 + random.uniform(-JITTER_FRACTION, JITTER_FRACTION))
 
 
-async def check_watch(watch: dict) -> None:
-    """Run one watch end to end: fetch, decide, persist, notify."""
+async def check_watch(watch: dict) -> bool:
+    """Run one watch end to end: fetch, decide, persist, notify.
+
+    Returns whether the check itself succeeded — not whether the item is in
+    stock. The caller uses this to detect a systemic outage.
+    """
     async with _gate:
         try:
             result = await strategies.check(watch)
@@ -96,24 +100,59 @@ async def check_watch(watch: dict) -> None:
     for event in decision.events:
         await _emit(watch, event)
 
+    return result.ok
+
+
+def _effective_level(watch: dict, kind: str) -> str:
+    """A broken watch is always urgent, whatever the watch is set to.
+
+    Everything else honours the watch's own alert_level.
+    """
+    if kind == WATCH_FAILING:
+        return "critical"
+    return "critical" if watch.get("alert_level") == "critical" else "info"
+
 
 async def _emit(watch: dict, event) -> None:
     if _suppressed(watch, event.kind):
         log.info("watch %s: %s suppressed by cooldown", watch["id"], event.kind)
         return
 
+    level = _effective_level(watch, event.kind)
     event_id = db.insert_event(watch["id"], event.kind, event.from_state,
                                event.to_state, event.payload)
+
+    delivered = False
+    errors: list[str] = []
+
     try:
         await telegram.send_event(watch, event.kind, event.payload)
-        db.mark_notified(event_id)
-        db.update_watch(watch["id"], last_alert_at=stamp())
-        log.info("watch %s: %s notified", watch["id"], event.kind)
+        delivered = True
     except Exception as exc:
-        # The event row survives with notify_error set, so the dashboard shows
-        # that something fired even when delivery failed.
-        db.mark_notified(event_id, error=str(exc)[:500])
-        log.error("watch %s: %s notify failed: %s", watch["id"], event.kind, exc)
+        errors.append(f"telegram: {exc}")
+
+    # Critical watches also go out on a channel that ignores Do Not Disturb.
+    if level == "critical" and ntfy.configured():
+        try:
+            await ntfy.send(
+                title=f"{watch.get('brand') or 'Restock'} — {event.kind.replace('_', ' ')}",
+                body=(event.payload.get("title") or watch.get("name") or "")[:200],
+                url=event.payload.get("cart_url") or event.payload.get("product_url"),
+                priority="urgent" if event.kind != WATCH_FAILING else "high",
+            )
+            delivered = True
+        except Exception as exc:
+            errors.append(f"ntfy: {exc}")
+
+    # The event row survives either way, so the dashboard shows that something
+    # fired even when every channel failed.
+    db.mark_notified(event_id, error="; ".join(errors)[:500] if errors else None)
+    if delivered:
+        db.update_watch(watch["id"], last_alert_at=stamp())
+        log.info("watch %s: %s notified (%s)", watch["id"], event.kind, level)
+    else:
+        log.error("watch %s: %s undelivered: %s", watch["id"], event.kind,
+                  "; ".join(errors))
 
 
 def _suppressed(watch: dict, kind: str) -> bool:
@@ -141,11 +180,23 @@ async def tick() -> None:
             log.exception("could not read due watches")
             return
 
-        if due:
-            log.info("tick: %d watch(es) due", len(due))
-            await asyncio.gather(*(check_watch(w) for w in due),
-                                 return_exceptions=True)
-        await heartbeat.ping()
+        if not due:
+            await heartbeat.ok()
+            return
+
+        log.info("tick: %d watch(es) due", len(due))
+        results = await asyncio.gather(*(check_watch(w) for w in due),
+                                       return_exceptions=True)
+
+        succeeded = sum(1 for r in results if r is True)
+        if succeeded == 0:
+            # Every single check failed. That is not a quiet market — it is an
+            # outage, most likely this host being refused. Trip the same alarm a
+            # crash would, because a green heartbeat here would be a lie.
+            await heartbeat.fail(
+                f"all {len(results)} check(s) failed this tick")
+        else:
+            await heartbeat.ok()
 
 
 def start() -> AsyncIOScheduler:

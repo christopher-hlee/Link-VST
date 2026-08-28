@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from .. import security
 from ..config import COOKIE_NAME, SESSION_MAX_AGE
-from ..notify import telegram
+from ..notify import ntfy, telegram
 
 router = APIRouter()
 
@@ -44,4 +44,5 @@ def me(request: Request):
         "authenticated": security.session_valid(request.cookies.get(COOKIE_NAME)),
         "auth_configured": security.configured(),
         "telegram_configured": telegram.configured(),
+        "ntfy_configured": ntfy.configured(),
     }

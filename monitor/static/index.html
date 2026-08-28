@@ -71,6 +71,7 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut
 .badge.unknown{color:var(--blue);border-color:var(--blue);background:transparent}
 .badge.failing{color:var(--red);border-color:var(--red);background:var(--red-d)}
 .badge.armed{color:var(--amber);border-color:var(--amber);background:var(--amber-d)}
+.badge.critical{color:var(--red);border-color:var(--red);background:transparent}
 
 .meta{display:flex;gap:10px;flex-wrap:wrap;font-size:.7rem;color:var(--muted);
   font-family:var(--mono)}
@@ -146,6 +147,10 @@ th{color:var(--muted);font-weight:600}
       <option value="slow">Every 15 min</option>
       <option value="fast">Every 45 s</option>
     </select>
+    <select id="addLevel" title="Critical also alerts on ntfy, which ignores Do Not Disturb">
+      <option value="info">Normal</option>
+      <option value="critical">Critical</option>
+    </select>
     <button class="primary" id="addBtn" onclick="addWatch()">Add watch</button>
   </div>
   <div id="detectNote"></div>
@@ -207,9 +212,10 @@ async function doLogout() {
 }
 
 // ---------- rendering ----------
-const ICON = {in_stock: '●', out_of_stock: '○', unknown: '◐', failing: '✕', armed: '⚡'};
+const ICON = {in_stock: '●', out_of_stock: '○', unknown: '◐', failing: '✕',
+              armed: '⚡', critical: '!'};
 const LABEL = {in_stock: 'IN STOCK', out_of_stock: 'SOLD OUT', unknown: 'NO BASELINE',
-               failing: 'FAILING', armed: 'ARMED'};
+               failing: 'FAILING', armed: 'ARMED', critical: 'CRITICAL'};
 
 function badge(kind) {
   return `<span class="badge ${kind}">${ICON[kind]} ${LABEL[kind]}</span>`;
@@ -258,7 +264,8 @@ function renderGrid(watches) {
         </div>
         ${w.last_price != null ? `<div class="price">$${w.last_price}</div>` : ''}
       </div>
-      <div>${badge(state)} ${armed ? badge('armed') : ''}</div>
+      <div>${badge(state)} ${armed ? badge('armed') : ''}
+           ${w.alert_level === 'critical' ? badge('critical') : ''}</div>
       <div class="meta">
         <span>${esc(w.strategy)}/${esc(w.kind)}</span>
         <span>every ${Math.round((armed ? w.hot_interval_s : w.base_interval_s) / 60 * 10) / 10}m</span>
@@ -273,6 +280,9 @@ function renderGrid(watches) {
                 : `<button class="sm" onclick="arm(${w.id})">Arm 1h</button>`}
         <button class="sm" onclick="toggle(${w.id},${w.enabled ? 0 : 1})">
           ${w.enabled ? 'Pause' : 'Resume'}</button>
+        <button class="sm" onclick="setLevel(${w.id},'${w.alert_level === 'critical'
+          ? 'info' : 'critical'}')">
+          ${w.alert_level === 'critical' ? 'Make normal' : 'Make critical'}</button>
         <button class="sm danger" onclick="del(${w.id})">Delete</button>
       </div>
     </div>`;
@@ -315,7 +325,8 @@ async function addWatch() {
   try {
     const res = await api('/watches', {
       method: 'POST',
-      body: JSON.stringify({url, tier: $('addTier').value})
+      body: JSON.stringify({url, tier: $('addTier').value,
+                            alert_level: $('addLevel').value})
     });
     const w = res.watch;
     $('addUrl').value = '';
@@ -345,6 +356,8 @@ const arm = id => api(`/watches/${id}/arm`, {method: 'POST',
 const disarm = id => api(`/watches/${id}/disarm`, {method: 'POST'}).then(refresh);
 const toggle = (id, on) => api(`/watches/${id}`, {method: 'PATCH',
   body: JSON.stringify({enabled: !!on})}).then(refresh);
+const setLevel = (id, level) => api(`/watches/${id}`, {method: 'PATCH',
+  body: JSON.stringify({alert_level: level})}).then(refresh);
 
 function del(id) {
   const w = WATCHES.find(x => x.id === id);
@@ -398,9 +411,17 @@ async function start() {
 
   close_('login');
   $('app').classList.remove('hide');
-  $('warnings').innerHTML = me.telegram_configured ? '' :
-    `<div class="warn">Telegram is not configured — alerts will be recorded but not
-     delivered. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in monitor/.env.</div>`;
+  let warn = '';
+  if (!me.telegram_configured) {
+    warn += `<div class="warn">Telegram is not configured — alerts will be recorded
+      but not delivered. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in monitor/.env.</div>`;
+  }
+  if (!me.ntfy_configured) {
+    warn += `<div class="warn">ntfy is not configured, so watches marked critical
+      alert exactly like normal ones. Set NTFY_TOPIC in monitor/.env to get
+      notifications that ignore Do Not Disturb.</div>`;
+  }
+  $('warnings').innerHTML = warn;
   await refresh();
   clearInterval(TIMER);
   TIMER = setInterval(refresh, 10000);

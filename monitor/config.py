@@ -21,6 +21,11 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "")
 
+# Second channel for alert_level="critical". Free, and its high-priority
+# notifications pierce Do Not Disturb, which Telegram's do not.
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+
 # Strategy credentials
 TARGET_API_KEY = os.environ.get(
     "TARGET_API_KEY", "9f36aeafbe60771e321a7cc95a78140772ab3e96"
