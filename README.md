@@ -80,12 +80,16 @@ complete. Generate the dashboard credentials on the server:
 monitor/venv/bin/python -m monitor.hashpw
 ```
 
-Then add the Telegram values. Create a bot with `@BotFather`, message it once,
-and read your chat id from:
+Then wire up Telegram with one command — it validates the token, waits for you
+to message the bot, discovers your chat id, restarts the service and sends a
+test message:
 
 ```bash
-curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+./setup-telegram.sh
 ```
+
+Create the bot with `@BotFather` first; that is the only part that happens off
+the server.
 
 Finally set `HEALTHCHECK_URL` to a [healthchecks.io](https://healthchecks.io)
 ping URL. This is the dead-man's switch: it emails you when the pings stop,
