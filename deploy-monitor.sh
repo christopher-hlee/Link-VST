@@ -79,3 +79,7 @@ if ! ./verify-targets.sh; then
   echo "!! strategy the app depends on will fail. See the guidance above."
   exit 1
 fi
+
+echo
+echo "==> Self-test against the running service"
+./selftest.sh
