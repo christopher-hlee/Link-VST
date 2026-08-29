@@ -162,6 +162,8 @@ def _payload(result: CheckResult) -> dict[str, Any]:
         "product_url": result.product_url,
         "cart_url": result.cart_url,
         "image": result.image,
+        # extra carries per-variant offers, so the notifier can build one cart
+        # button per size instead of choosing a variant on the person's behalf.
         **result.extra,
     }
 

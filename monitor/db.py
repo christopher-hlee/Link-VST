@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS watches (
     kind         TEXT NOT NULL DEFAULT 'product',  -- product | collection
     target_ref   TEXT,                             -- handle | variant_id | tcin | sku
     store_ref    TEXT,                             -- zip / store id for pickup checks
+    size_pref    TEXT,                             -- ordered sizes, e.g. "m,l". Empty = any.
     base_interval_s INTEGER NOT NULL DEFAULT 300,
     hot_interval_s  INTEGER NOT NULL DEFAULT 45,
     hot_until    TEXT,
@@ -103,7 +104,7 @@ def init_db() -> None:
 # ---------------------------------------------------------------- watches
 
 WATCH_WRITABLE = {
-    "name", "brand", "url", "strategy", "kind", "target_ref", "store_ref",
+    "name", "brand", "url", "strategy", "kind", "target_ref", "store_ref", "size_pref",
     "base_interval_s", "hot_interval_s", "hot_until", "alert_level", "enabled",
     "etag", "last_modified", "last_state", "last_price", "last_title",
     "last_image", "baseline_json", "consecutive_failures", "last_error",

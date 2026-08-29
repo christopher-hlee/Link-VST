@@ -147,6 +147,8 @@ th{color:var(--muted);font-weight:600}
       <option value="slow">Every 15 min</option>
       <option value="fast">Every 45 s</option>
     </select>
+    <input type="text" id="addSize" placeholder="Size (M, L)" style="flex:0 0 120px;min-width:0"
+           title="Apparel only. Leave blank to alert on any size. Comma-separated, most wanted first.">
     <select id="addLevel" title="Critical also alerts on ntfy, which ignores Do Not Disturb">
       <option value="info">Normal</option>
       <option value="critical">Critical</option>
@@ -268,6 +270,7 @@ function renderGrid(watches) {
            ${w.alert_level === 'critical' ? badge('critical') : ''}</div>
       <div class="meta">
         <span>${esc(w.strategy)}/${esc(w.kind)}</span>
+        ${w.size_pref ? `<span style="color:var(--accent-l)">size ${esc(w.size_pref)}</span>` : ''}
         <span>every ${Math.round((armed ? w.hot_interval_s : w.base_interval_s) / 60 * 10) / 10}m</span>
         <span>checked ${ago(w.last_checked_at)}</span>
       </div>
@@ -326,10 +329,11 @@ async function addWatch() {
     const res = await api('/watches', {
       method: 'POST',
       body: JSON.stringify({url, tier: $('addTier').value,
-                            alert_level: $('addLevel').value})
+                            alert_level: $('addLevel').value,
+                            size_pref: $('addSize').value.trim() || null})
     });
     const w = res.watch;
-    $('addUrl').value = '';
+    $('addUrl').value = ''; $('addSize').value = '';
     $('detectNote').innerHTML =
       `<p class="note">Added <b>${esc(w.name)}</b> via <b>${esc(w.strategy)}</b>
        (${esc(w.kind)}). First check runs within 15s.</p>`;

@@ -69,6 +69,15 @@ def render(watch: dict, kind: str, payload: dict) -> str:
         if len(handles) > 10:
             lines.append(f"• …and {len(handles) - 10} more")
 
+    offers = payload.get("matched_offers") or payload.get("offers") or []
+    sizes = [o.get("title") for o in offers
+             if o.get("title") and o["title"].lower() not in ("default title", "default")]
+    if sizes:
+        lines.append("")
+        prefs = payload.get("size_prefs") or []
+        label = "Your sizes" if prefs and payload.get("matched_offers") else "Available"
+        lines.append(f"<b>{label}:</b> {_esc(', '.join(sizes[:12]))}")
+
     stores = payload.get("pickup_stores") or payload.get("stores") or []
     if stores:
         lines.append("")
@@ -81,14 +90,42 @@ def render(watch: dict, kind: str, payload: dict) -> str:
     return "\n".join(lines)
 
 
+MAX_SIZE_BUTTONS = 8
+BUTTONS_PER_ROW = 4
+
+
 def _keyboard(watch: dict, payload: dict) -> dict | None:
-    buttons = []
-    if payload.get("cart_url"):
-        buttons.append({"text": "⚡ Add to cart", "url": payload["cart_url"]})
+    """Inline keyboard: one cart button per size, then the product page.
+
+    Apparel is the reason this is not a single button. A lone "Add to cart"
+    silently picks some variant, and being dropped into checkout holding the
+    wrong size is worse than no shortcut at all — so every available size gets
+    its own permalink and the choice stays with the person.
+    """
+    rows: list[list[dict]] = []
+
+    offers = payload.get("matched_offers") or payload.get("offers") or []
+    sized = [o for o in offers if o.get("cart_url") and o.get("title")
+             and o["title"].lower() not in ("default title", "default")]
+
+    if len(sized) > 1:
+        row: list[dict] = []
+        for offer in sized[:MAX_SIZE_BUTTONS]:
+            row.append({"text": f"⚡ {offer['title']}", "url": offer["cart_url"]})
+            if len(row) == BUTTONS_PER_ROW:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+    elif payload.get("cart_url"):
+        # One variant, or a product with no size axis at all.
+        rows.append([{"text": "⚡ Add to cart", "url": payload["cart_url"]}])
+
     product_url = payload.get("product_url") or watch.get("url")
     if product_url:
-        buttons.append({"text": "Open product", "url": product_url})
-    return {"inline_keyboard": [buttons]} if buttons else None
+        rows.append([{"text": "Open product page", "url": product_url}])
+
+    return {"inline_keyboard": rows} if rows else None
 
 
 async def send_event(watch: dict, kind: str, payload: dict) -> None:

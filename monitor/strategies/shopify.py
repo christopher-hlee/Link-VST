@@ -51,6 +51,45 @@ def cart_url(base: str, variant_id) -> str:
     return f"{base}/cart/{variant_id}:1"
 
 
+# Shopify variant titles are free text: "M", "Medium", "M / Black", "Large".
+# Normalise enough to match a stated size preference without being clever.
+_SIZE_ALIASES = {
+    "xs": {"xs", "extra small", "x-small"},
+    "s": {"s", "small"},
+    "m": {"m", "medium", "med"},
+    "l": {"l", "large"},
+    "xl": {"xl", "extra large", "x-large"},
+    "xxl": {"xxl", "2xl", "xx-large"},
+}
+
+
+def _canonical(token: str) -> str:
+    token = token.strip().lower()
+    for canon, spellings in _SIZE_ALIASES.items():
+        if token in spellings:
+            return canon
+    return token
+
+
+def parse_sizes(raw: str | None) -> list[str]:
+    """Ordered size preference, most wanted first. Empty means any size."""
+    if not raw:
+        return []
+    return [_canonical(part) for part in raw.split(",") if part.strip()]
+
+
+def variant_matches(variant_title: str | None, prefs: list[str]) -> bool:
+    """True when any slash-separated option of the variant matches a preference.
+
+    "M / Black" matches a preference of "m", so a colourway axis does not
+    prevent a size match.
+    """
+    if not prefs:
+        return True
+    options = [_canonical(part) for part in (variant_title or "").split("/")]
+    return any(pref in options for pref in prefs)
+
+
 def _price(raw, *, in_cents: bool) -> float | None:
     """products.json gives a decimal string; the .js endpoint gives integer cents."""
     if raw is None:
@@ -93,7 +132,28 @@ async def _check_product(watch: dict) -> CheckResult:
 
     variants = data.get("variants") or []
     available = [v for v in variants if v.get("available")]
-    chosen = available[0] if available else (variants[0] if variants else None)
+    prefs = parse_sizes(watch.get("size_pref"))
+
+    # Every available variant gets its own cart permalink, so an alert can offer
+    # one button per size rather than guessing which one the person wanted.
+    offers = [
+        {
+            "id": v.get("id"),
+            "title": v.get("title"),
+            "price": _price(v.get("price"), in_cents=True),
+            "cart_url": cart_url(base, v.get("id")),
+            "preferred": variant_matches(v.get("title"), prefs),
+        }
+        for v in available
+    ]
+    wanted = [o for o in offers if o["preferred"]]
+
+    # A size preference is a statement that other sizes are not useful, so it
+    # gates the alert. Without one, any available variant counts.
+    in_stock = bool(wanted) if prefs else bool(available)
+
+    # Lead with a size the person actually asked for.
+    chosen = (wanted or offers or [None])[0]
 
     image = data.get("featured_image")
     if isinstance(image, str) and image.startswith("//"):
@@ -101,11 +161,11 @@ async def _check_product(watch: dict) -> CheckResult:
 
     return CheckResult(
         ok=True,
-        state=IN_STOCK if available else OUT_OF_STOCK,
-        price=_price((chosen or {}).get("price"), in_cents=True),
+        state=IN_STOCK if in_stock else OUT_OF_STOCK,
+        price=(chosen or {}).get("price") if chosen else None,
         title=data.get("title"),
         product_url=f"{base}/products/{handle}",
-        cart_url=cart_url(base, chosen["id"]) if available and chosen else None,
+        cart_url=(chosen or {}).get("cart_url") if in_stock else None,
         image=image,
         http_status=resp.status,
         etag=resp.etag,
@@ -113,7 +173,9 @@ async def _check_product(watch: dict) -> CheckResult:
         extra={
             "variants_total": len(variants),
             "variants_available": len(available),
-            "variant_titles": [v.get("title") for v in available[:8]],
+            "size_prefs": prefs,
+            "offers": offers[:12],
+            "matched_offers": wanted[:12],
         },
     )
 

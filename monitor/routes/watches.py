@@ -19,6 +19,7 @@ class WatchCreate(BaseModel):
     kind: str | None = None
     target_ref: str | None = None
     store_ref: str | None = None
+    size_pref: str | None = None
     tier: str = "base"
     alert_level: str = "info"
 
@@ -27,6 +28,7 @@ class WatchUpdate(BaseModel):
     name: str | None = None
     brand: str | None = None
     store_ref: str | None = None
+    size_pref: str | None = None
     tier: str | None = None
     alert_level: str | None = None
     enabled: bool | None = None
