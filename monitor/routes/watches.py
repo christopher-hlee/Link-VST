@@ -38,9 +38,22 @@ class ArmRequest(BaseModel):
     minutes: int = Field(default=60, ge=1, le=60 * 24 * 7)
 
 
+def _decorate(watch: dict) -> dict:
+    """Attach derived fields the dashboard needs to render a row."""
+    offers = db.get_offers(watch)
+    watch = dict(watch)
+    watch["offers"] = offers
+    prefs = {p.strip().lower() for p in (watch.get("size_pref") or "").split(",") if p.strip()}
+    watch["matched_offers"] = [o for o in offers if o.get("preferred")] if prefs else []
+    watch["available_sizes"] = [o.get("title") for o in offers if o.get("title")]
+    watch["paused"] = not watch.get("enabled")
+    return watch
+
+
 @router.get("/watches")
 def list_watches():
-    return {"watches": db.list_watches(), "summary": db.summary()}
+    return {"watches": [_decorate(w) for w in db.list_watches()],
+            "summary": db.summary()}
 
 
 @router.get("/watches/{watch_id}")

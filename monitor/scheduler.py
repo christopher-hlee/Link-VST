@@ -93,6 +93,9 @@ async def check_watch(watch: dict) -> bool:
             updates["last_title"] = result.title
         if result.image:
             updates["last_image"] = result.image
+        offers = result.extra.get("offers")
+        if offers is not None:
+            updates["last_offers_json"] = json.dumps(offers)
 
     db.update_watch(watch["id"], **updates)
     db.record_check(

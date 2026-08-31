@@ -8,6 +8,18 @@ FastAPI + SQLite + APScheduler, no build step and no frontend framework. Binds
 `127.0.0.1:8003` behind Caddy, so it coexists with anything else already on the
 box.
 
+## The dashboard
+
+A single sheet grouped by what needs you rather than by when it was added: what
+to act on, then what is held, then what is broken, then everything waiting
+collapsed into a table. It stays readable at forty watches because most of them
+are one row in the last group.
+
+In-stock apparel shows one cart chip per available size, the preferred size
+promoted. Sold-out sizes are absent rather than disabled — a greyed button
+invites a tap that cannot work. Single-variant products collapse to one
+"Add to cart".
+
 ## The rule that shapes everything
 
 **A failed check never becomes a stock state.** A 403, a timeout, or a parse
@@ -15,7 +27,12 @@ error leaves the last known state untouched and increments a failure counter.
 Treating "we couldn't reach the site" as "it's sold out" is how monitors die
 quietly while still looking healthy — the dashboard would show a calm grid of
 sold-out items and you'd never know. After five consecutive failures the watch
-alerts you that it's broken.
+alerts you that it's broken and pauses itself.
+
+The same principle produces **held**: an item back in stock, but not in the size
+you watch. That is not sold out either. A held row names what came back, what
+you watch, and says nothing was sent on purpose — so silence always carries a
+reason you can read.
 
 ## Polling
 

@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS watches (
     last_price   REAL,
     last_title   TEXT,
     last_image   TEXT,
+    -- Per-variant availability and cart permalinks from the last good check, so
+    -- the dashboard can offer one cart link per size without re-fetching.
+    last_offers_json TEXT,
     baseline_json TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     last_error   TEXT,
@@ -107,7 +110,7 @@ WATCH_WRITABLE = {
     "name", "brand", "url", "strategy", "kind", "target_ref", "store_ref", "size_pref",
     "base_interval_s", "hot_interval_s", "hot_until", "alert_level", "enabled",
     "etag", "last_modified", "last_state", "last_price", "last_title",
-    "last_image", "baseline_json", "consecutive_failures", "last_error",
+    "last_image", "last_offers_json", "baseline_json", "consecutive_failures", "last_error",
     "last_checked_at", "next_check_at", "last_alert_at",
 }
 
@@ -167,6 +170,18 @@ def due_watches(limit: int = 50) -> list[dict]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_offers(watch: dict) -> list[dict]:
+    """Per-variant offers from the last successful check; [] when unknown."""
+    raw = watch.get("last_offers_json")
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, list) else []
+    except (ValueError, TypeError):
+        return []
 
 
 def get_baseline(watch: dict) -> list[str] | None:
@@ -255,7 +270,8 @@ def summary() -> dict:
                  COUNT(*)                                        AS total,
                  SUM(enabled=1)                                  AS enabled,
                  SUM(last_state='in_stock' AND enabled=1)        AS in_stock,
-                 SUM(consecutive_failures >= 5)                  AS failing,
+                 SUM(last_state='held' AND enabled=1)            AS held,
+                 SUM(consecutive_failures > 0)                   AS failing,
                  SUM(hot_until IS NOT NULL
                      AND hot_until > datetime('now'))            AS armed
                FROM watches"""
