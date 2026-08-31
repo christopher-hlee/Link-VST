@@ -112,3 +112,24 @@ async def test_strategies_use_the_proxy_transparently(proxied, monkeypatch):
     assert result.cart_url == "https://satisfyrunning.com/cart/9:1", \
         "cart links must point at the store, never at the proxy"
     assert route.called
+
+
+# --- content negotiation ---------------------------------------------------
+
+def test_we_never_advertise_an_encoding_we_cannot_decode():
+    """Regression: the app once claimed brotli it had no decoder for.
+
+    Shopify honoured the claim, httpx got bytes it could not read, and the
+    parse failure surfaced as "no supported platform detected" — a network
+    capability bug wearing the costume of an unsupported store.
+    """
+    import httpx
+
+    claimed = fetcher.DEFAULT_HEADERS.get("Accept-Encoding")
+    if claimed is None:
+        return  # httpx negotiates from its own installed codecs, which is correct
+
+    supported = {p.strip() for p in
+                 httpx.Client().headers.get("accept-encoding", "").split(",")}
+    assert {p.strip() for p in claimed.split(",")} <= supported, (
+        f"advertising {claimed!r} but this client can only decode {supported}")

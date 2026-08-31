@@ -22,11 +22,16 @@ log = logging.getLogger("monitor.fetcher")
 _client: httpx.AsyncClient | None = None
 _limiters: dict[str, "DomainLimiter"] = {}
 
+# Accept-Encoding is deliberately absent: httpx sets it from the codecs it can
+# actually decode. Hardcoding "gzip, deflate, br" here claimed brotli support
+# the client did not have — Shopify honoured it, httpx received bytes it could
+# not read, and .json() failed. The request looked successful, so the failure
+# surfaced as "no supported platform detected" rather than as a decode error.
+# Never advertise a capability you do not have.
 DEFAULT_HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
     "Cache-Control": "no-cache",
 }
 
@@ -153,7 +158,9 @@ async def fetch(url: str, *, etag: str | None = None,
                 parsed = None
                 try:
                     parsed = resp.json()
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, UnicodeDecodeError):
+                    # Not JSON, or undecodable. Callers that need JSON check for
+                    # None; .text still carries whatever arrived for diagnosis.
                     pass
                 return FetchResponse(
                     ok=True, status=200, text=resp.text, json=parsed,
