@@ -9,7 +9,7 @@ import pytest
 import respx
 
 from monitor.notify import telegram
-from monitor.statemachine import IN_STOCK, OUT_OF_STOCK
+from monitor.statemachine import HELD, IN_STOCK, OUT_OF_STOCK
 from monitor.strategies import shopify
 
 STORE = "https://satisfyrunning.com"
@@ -53,15 +53,31 @@ def test_variant_matching(title, prefs, hit):
 # --- gating ----------------------------------------------------------------
 
 @respx.mock
-async def test_wrong_size_in_stock_does_not_count_as_restock():
-    """The whole point: L being back does not help someone who wears M."""
+async def test_wrong_size_in_stock_is_held_not_sold_out():
+    """L being back does not help someone who wears M — but it is not sold out.
+
+    Reporting sold out here would be a lie the person cannot detect: the item is
+    on the shelf. Held says the watch is working and deliberately quiet.
+    """
     respx.get(f"{STORE}/products/justice-short.js").mock(
         return_value=httpx.Response(200, json=js(("S", False), ("M", False), ("L", True))))
 
     r = await shopify.check(watch(size_pref="M"))
 
-    assert r.ok and r.state == OUT_OF_STOCK
-    assert r.cart_url is None
+    assert r.ok and r.state == HELD
+    assert r.cart_url is None, "no cart link — nothing here is buyable in your size"
+    assert r.extra["available_sizes"] == ["L"]
+    assert r.extra["watched_sizes"] == ["M"]
+
+
+@respx.mock
+async def test_nothing_available_is_sold_out_even_with_a_size_preference():
+    respx.get(f"{STORE}/products/justice-short.js").mock(
+        return_value=httpx.Response(200, json=js(("S", False), ("M", False))))
+
+    r = await shopify.check(watch(size_pref="M"))
+
+    assert r.state == OUT_OF_STOCK, "held requires something to actually be in stock"
 
 
 @respx.mock
@@ -145,10 +161,53 @@ def test_size_buttons_wrap_and_are_capped():
     assert sum(len(r) for r in size_rows) == 8, "capped, not unbounded"
 
 
-def test_message_body_names_the_sizes():
+def test_sized_restock_message_shape():
     body = telegram.render(
         {"name": "Justice Short", "brand": "Satisfy"}, "restock",
-        {"title": "Justice Short", "price": 185.0, "size_prefs": ["m"],
-         "matched_offers": [{"title": "M", "cart_url": "x"}],
-         "offers": [{"title": "M", "cart_url": "x"}]})
-    assert "Your sizes:</b> M" in body
+        {"title": 'Justice Short 8"', "price": 185.0,
+         "matched_offers": [{"title": "M"}],
+         "offers": [{"title": "M"}, {"title": "S"}, {"title": "L"}]})
+    assert "Back in your size" in body
+    assert "<b>Your sizes: M</b>" in body
+    assert "Also back: S, L" in body
+    assert "$185" in body and "$185.0" not in body
+
+
+def test_single_variant_restock_says_so():
+    body = telegram.render(
+        {"name": "Robot", "brand": "Cafelat"}, "restock",
+        {"title": "Robot Barista", "price": 415.0,
+         "offers": [{"title": "Default Title"}]})
+    assert "Back in stock" in body
+    assert "Back in your size" not in body
+    assert "One variant, no sizes." in body
+
+
+def test_held_note_names_both_sizes_and_disclaims_itself():
+    body = telegram.render(
+        {"name": "Tee", "brand": "Satisfy"}, "held_note",
+        {"title": "Short Distance Tee", "price": 95.0,
+         "available_sizes": ["XL"], "watched_sizes": ["M"]})
+    assert "<b>Held — Short Distance Tee</b>" in body
+    assert "<b>XL</b>" in body and "<b>M</b>" in body
+    assert "not an alert" in body, "silence must explain itself"
+
+
+def test_broken_message_carries_the_code_and_the_staleness_warning():
+    body = telegram.render(
+        {"name": "Zelda", "brand": "Target", "last_state": "sold_out"},
+        "watch_failing",
+        {"failures": 5, "error": "HTTP 410 — page is gone", "paused": True})
+    assert "<code>HTTP 410 — page is gone</code>" in body
+    assert "should not be trusted" in body
+    assert "paused after 5 failures" in body
+
+
+def test_new_drop_lists_products_and_the_count_change():
+    body = telegram.render(
+        {"name": "Satisfy", "brand": "Satisfy"}, "new_product",
+        {"handles": ["a", "b"], "titles": {"a": 'Justice Short 8"', "b": "Rise Short"},
+         "baseline_count": 214})
+    assert "<b>🆕 2 new from Satisfy</b>" in body
+    assert '· Justice Short 8"' in body
+    assert "<code>214 → 216 products</code>" in body

@@ -12,9 +12,19 @@ UNKNOWN = "unknown"
 IN_STOCK = "in_stock"
 OUT_OF_STOCK = "out_of_stock"
 
+# In stock, healthy, and correctly silent: what returned is not the size being
+# watched. Held is deliberately NOT a variant of sold out. Collapsing the two
+# would make a working watch indistinguishable from a dead one, which is the
+# failure this whole state machine exists to prevent.
+HELD = "held"
+
+# A drop watch has no stock state of its own — it is watching a catalogue.
+WATCHING = "watching"
+
 # Event kinds
 RESTOCK = "restock"
 NEW_PRODUCT = "new_product"
+HELD_NOTE = "held_note"
 PRICE_DROP = "price_drop"
 WATCH_FAILING = "watch_failing"
 WATCH_RECOVERED = "watch_recovered"
@@ -57,6 +67,7 @@ class Decision:
     events: list[Event] = field(default_factory=list)
     baseline: list[str] | None = None   # new handle baseline, collection watches
     price: float | None = None
+    pause: bool = False                 # stop polling: too many failures in a row
 
 
 def decide(
@@ -99,26 +110,38 @@ def _decide_failure(prev_state, prev_failures, prev_baseline, prev_price,
     failures = prev_failures + 1
     events: list[Event] = []
     # Alert exactly once, on the crossing, so a persistently broken watch does
-    # not generate an alert every single cycle.
+    # not generate an alert every single cycle. At that point the watch is also
+    # paused: a watch that has failed this many times consecutively is not
+    # watching anything, and quietly retrying forever hides that.
+    pause = failures >= failure_threshold
     if failures == failure_threshold:
         events.append(Event(kind=WATCH_FAILING, payload={
             "failures": failures,
             "error": result.error,
             "http_status": result.http_status,
+            "paused": True,
         }))
     # prev_state is preserved verbatim. This is the rule that matters.
     return Decision(state=prev_state, failures=failures, events=events,
-                    baseline=prev_baseline, price=prev_price)
+                    baseline=prev_baseline, price=prev_price, pause=pause)
 
 
 def _decide_product(prev_state, prev_price, result, events) -> Decision:
     new_state = result.state or UNKNOWN
 
-    # Only a genuine out -> in transition is a restock. Coming from UNKNOWN just
+    # Only a genuine transition into stock is a restock. Coming from UNKNOWN just
     # establishes the baseline: adding a watch for something already in stock
-    # should not immediately ping you.
-    if prev_state == OUT_OF_STOCK and new_state == IN_STOCK:
+    # should not immediately ping you. HELD counts as a source, because the
+    # preferred size arriving later is exactly the moment worth waking for.
+    if prev_state in (OUT_OF_STOCK, HELD) and new_state == IN_STOCK:
         events.append(Event(kind=RESTOCK, from_state=prev_state,
+                            to_state=new_state, payload=_payload(result)))
+
+    # Something came back, but not in the watched size. Say so once, as a note
+    # rather than an alert — silence with a stated reason, so the person never
+    # has to wonder whether the watch is broken. Never repeats while held holds.
+    if prev_state == OUT_OF_STOCK and new_state == HELD:
+        events.append(Event(kind=HELD_NOTE, from_state=prev_state,
                             to_state=new_state, payload=_payload(result)))
 
     if (prev_price is not None and result.price is not None
@@ -139,20 +162,23 @@ def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
 
     # First successful check just records what's there.
     if prev_baseline is None:
-        return Decision(state=IN_STOCK if handles else OUT_OF_STOCK,
-                        failures=0, events=events, baseline=handles)
+        return Decision(state=WATCHING, failures=0, events=events,
+                        baseline=handles)
 
     known = set(prev_baseline)
     fresh = [h for h in handles if h not in known]
     if fresh:
         events.append(Event(kind=NEW_PRODUCT, from_state=prev_state,
-                            to_state=IN_STOCK,
-                            payload={**_payload(result), "handles": fresh}))
+                            to_state=WATCHING,
+                            payload={**_payload(result), "handles": fresh,
+                                     # What the catalogue held before this sweep,
+                                     # so the alert can say "214 -> 217".
+                                     "baseline_count": len(known)}))
 
     # Union, so a product briefly dropping out of the feed doesn't re-alert
     # when it comes back.
-    return Decision(state=IN_STOCK if handles else OUT_OF_STOCK, failures=0,
-                    events=events, baseline=sorted(known | set(handles)))
+    return Decision(state=WATCHING, failures=0, events=events,
+                    baseline=sorted(known | set(handles)))
 
 
 def _payload(result: CheckResult) -> dict[str, Any]:

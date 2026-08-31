@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 
 from ..fetcher import fetch
-from ..statemachine import CheckResult, IN_STOCK, OUT_OF_STOCK
+from ..statemachine import CheckResult, HELD, IN_STOCK, OUT_OF_STOCK
 
 NAME = "shopify"
 
@@ -148,9 +148,16 @@ async def _check_product(watch: dict) -> CheckResult:
     ]
     wanted = [o for o in offers if o["preferred"]]
 
-    # A size preference is a statement that other sizes are not useful, so it
-    # gates the alert. Without one, any available variant counts.
-    in_stock = bool(wanted) if prefs else bool(available)
+    # Three outcomes, not two. Nothing available is sold out. Something
+    # available in a watched size is in stock. Something available but NOT in a
+    # watched size is HELD — the watch is healthy and right to stay quiet, and
+    # saying "sold out" there would be a lie the person cannot detect.
+    if not available:
+        state = OUT_OF_STOCK
+    elif prefs and not wanted:
+        state = HELD
+    else:
+        state = IN_STOCK
 
     # Lead with a size the person actually asked for.
     chosen = (wanted or offers or [None])[0]
@@ -161,11 +168,11 @@ async def _check_product(watch: dict) -> CheckResult:
 
     return CheckResult(
         ok=True,
-        state=IN_STOCK if in_stock else OUT_OF_STOCK,
+        state=state,
         price=(chosen or {}).get("price") if chosen else None,
         title=data.get("title"),
         product_url=f"{base}/products/{handle}",
-        cart_url=(chosen or {}).get("cart_url") if in_stock else None,
+        cart_url=(chosen or {}).get("cart_url") if state == IN_STOCK else None,
         image=image,
         http_status=resp.status,
         etag=resp.etag,
@@ -176,6 +183,10 @@ async def _check_product(watch: dict) -> CheckResult:
             "size_prefs": prefs,
             "offers": offers[:12],
             "matched_offers": wanted[:12],
+            # Named explicitly so a held alert can say what came back and what
+            # is being watched, rather than leaving silence unexplained.
+            "available_sizes": [o["title"] for o in offers if o.get("title")],
+            "watched_sizes": [p.upper() for p in prefs],
         },
     )
 

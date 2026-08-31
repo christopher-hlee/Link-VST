@@ -10,19 +10,21 @@ import logging
 from ..config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from ..fetcher import get_client
 from ..statemachine import (
-    NEW_PRODUCT, PRICE_DROP, RESTOCK, WATCH_FAILING, WATCH_RECOVERED,
+    HELD_NOTE, NEW_PRODUCT, PRICE_DROP, RESTOCK, WATCH_FAILING,
+    WATCH_RECOVERED,
 )
 
 log = logging.getLogger("monitor.telegram")
 
 API = "https://api.telegram.org"
 
+# Telegram renders only bold, italic, code and links. Emoji are legitimate
+# here — this is the one surface where they are genuine message content.
 HEADLINE = {
-    RESTOCK:         "🟢 BACK IN STOCK",
-    NEW_PRODUCT:     "🔵 NEW DROP",
-    PRICE_DROP:      "🏷️ PRICE DROP",
-    WATCH_FAILING:   "🔴 WATCH FAILING",
-    WATCH_RECOVERED: "✅ WATCH RECOVERED",
+    NEW_PRODUCT:     "🆕",
+    PRICE_DROP:      "🏷️",
+    WATCH_FAILING:   "⚠️",
+    WATCH_RECOVERED: "✅",
 }
 
 
@@ -34,49 +36,121 @@ def _esc(value) -> str:
     return html.escape(str(value), quote=False)
 
 
-def render(watch: dict, kind: str, payload: dict) -> str:
-    """Build the HTML message body for one event."""
-    lines = [f"<b>{HEADLINE.get(kind, kind.upper())}</b>"]
+def _money(value) -> str:
+    """$185, not $185.0 — Shopify prices are whole numbers far more often than not."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return f"${amount:,.0f}" if amount == int(amount) else f"${amount:,.2f}"
 
-    label = payload.get("title") or watch.get("name") or "Watch"
-    brand = watch.get("brand")
-    lines.append(f"{_esc(brand)} — {_esc(label)}" if brand else _esc(label))
+
+def _sizes(payload: dict) -> list[str]:
+    return [o["title"] for o in (payload.get("offers") or [])
+            if o.get("title") and o["title"].lower() not in ("default title", "default")]
+
+
+def render(watch: dict, kind: str, payload: dict) -> str:
+    """Build one message body per event kind.
+
+    Each shape is deliberately different. A restock in your size, a restock with
+    no sizes, a drop, a broken watch and a held note are five different pieces
+    of news, and flattening them into one template makes the important one
+    (something is buyable right now) read like the routine ones.
+    """
+    brand = watch.get("brand") or ""
+    title = payload.get("title") or watch.get("name") or "Watch"
+    price = payload.get("price")
+    lines: list[str] = []
 
     if kind == WATCH_FAILING:
-        lines.append("")
-        lines.append(f"Failed {payload.get('failures')} checks in a row.")
+        lines.append(f"<b>⚠️ Watch broken — {_esc(title)}</b>")
+        if brand:
+            lines.append(f"<b>{_esc(brand)}</b>")
         lines.append(f"<code>{_esc(payload.get('error') or 'unknown error')}</code>")
         lines.append("")
-        lines.append("<i>Stock state is stale until this recovers.</i>")
+        n = payload.get("failures")
+        stale = watch.get("last_state")
+        sentence = f"{n} failed checks in a row."
+        if stale and stale != "unknown":
+            sentence += (f" The state you last saw (<i>{_esc(stale.replace('_', ' '))}</i>)"
+                         " is stale and should not be trusted.")
+        lines.append(sentence)
+        if payload.get("paused"):
+            lines.append("")
+            lines.append(f"<code>watch paused after {n} failures</code>")
+        return "\n".join(lines)
+
+    if kind == HELD_NOTE:
+        # Informational, sent once, and explicitly not an alert.
+        got = ", ".join(payload.get("available_sizes") or []) or "another size"
+        want = ", ".join(payload.get("watched_sizes") or []) or "your size"
+        lines.append(f"<b>Held — {_esc(title)}</b>")
+        head = f"{_esc(brand)} · " if brand else ""
+        if price is not None:
+            head += f"{_money(price)} · "
+        lines.append(f"{head}restocked in <b>{_esc(got)}</b> only. "
+                     f"You watch <b>{_esc(want)}</b>, so this is not an alert — "
+                     "just a note, sent once.")
         return "\n".join(lines)
 
     if kind == WATCH_RECOVERED:
-        lines.append(f"Recovered after {payload.get('after_failures')} failures.")
+        lines.append(f"<b>✅ Watch recovered — {_esc(title)}</b>")
+        lines.append(f"Back to normal after {payload.get('after_failures')} failures.")
         return "\n".join(lines)
-
-    if kind == PRICE_DROP:
-        lines.append(f"${payload.get('old_price')} → <b>${payload.get('new_price')}</b>")
-    elif payload.get("price") is not None:
-        lines.append(f"<b>${payload['price']}</b>")
 
     if kind == NEW_PRODUCT:
         handles = payload.get("handles") or []
         titles = payload.get("titles") or {}
-        lines.append("")
-        lines.append(f"<b>{len(handles)} new item(s):</b>")
-        for handle in handles[:10]:
-            lines.append(f"• {_esc(titles.get(handle) or handle)}")
+        lines.append(f"<b>🆕 {len(handles)} new from {_esc(brand or title)}</b>")
+        lines.append("Not in the catalogue an hour ago:")
+        for h in handles[:10]:
+            lines.append(f"· {_esc(titles.get(h) or h)}")
         if len(handles) > 10:
-            lines.append(f"• …and {len(handles) - 10} more")
+            lines.append(f"· …and {len(handles) - 10} more")
+        before = payload.get("baseline_count")
+        if before is not None:
+            lines.append("")
+            lines.append(f"<code>{before} → {before + len(handles)} products</code>")
+        return "\n".join(lines)
 
-    offers = payload.get("matched_offers") or payload.get("offers") or []
-    sizes = [o.get("title") for o in offers
-             if o.get("title") and o["title"].lower() not in ("default title", "default")]
-    if sizes:
+    if kind == PRICE_DROP:
+        lines.append(f"<b>🏷️ Price drop — {_esc(title)}</b>")
+        if brand:
+            lines.append(f"<b>{_esc(brand)}</b>")
+        lines.append(f"{_money(payload.get('old_price'))} → "
+                 f"<b>{_money(payload.get('new_price'))}</b>")
+        return "\n".join(lines)
+
+    # RESTOCK — two shapes, sized and single-variant.
+    matched = [o["title"] for o in (payload.get("matched_offers") or [])
+               if o.get("title")]
+    sizes = _sizes(payload)
+
+    if matched:
+        lines.append(f"<b>⚡ Back in your size — {_esc(title)}</b>")
+    else:
+        lines.append(f"<b>⚡ Back in stock — {_esc(title)}</b>")
+
+    head = f"<b>{_esc(brand)}</b>" if brand else ""
+    if price is not None:
+        head = f"{head} · {_money(price)}" if head else _money(price)
+    if head:
+        lines.append(head)
+
+    if matched:
+        lines.append(f"<b>Your sizes: {_esc(', '.join(matched))}</b>")
+        also = [s for s in sizes if s not in matched]
+        if also:
+            lines.append(f"Also back: {_esc(', '.join(also))}")
         lines.append("")
-        prefs = payload.get("size_prefs") or []
-        label = "Your sizes" if prefs and payload.get("matched_offers") else "Available"
-        lines.append(f"<b>{label}:</b> {_esc(', '.join(sizes[:12]))}")
+        lines.append("<i>Tap a size to put it in the cart.</i>")
+    elif len(sizes) > 1:
+        lines.append(f"Available: {_esc(', '.join(sizes))}")
+        lines.append("")
+        lines.append("<i>Tap a size to put it in the cart.</i>")
+    else:
+        lines.append("One variant, no sizes.")
 
     stores = payload.get("pickup_stores") or payload.get("stores") or []
     if stores:
@@ -84,8 +158,8 @@ def render(watch: dict, kind: str, payload: dict) -> str:
         lines.append("<b>Local pickup:</b>")
         for store in stores[:5]:
             qty = store.get("quantity")
-            suffix = f" ×{qty}" if qty else ""
-            lines.append(f"• {_esc(store.get('store') or store.get('city'))}{suffix}")
+            lines.append(f"· {_esc(store.get('store') or store.get('city'))}"
+                         f"{f' ×{qty}' if qty else ''}")
 
     return "\n".join(lines)
 

@@ -79,6 +79,12 @@ async def check_watch(watch: dict) -> bool:
     }
     if decision.baseline is not None:
         updates["baseline_json"] = json.dumps(decision.baseline)
+    if decision.pause and watch.get("enabled"):
+        # A watch that has failed this many times running is not watching
+        # anything. Stop polling rather than retrying into the void forever.
+        updates["enabled"] = 0
+        log.warning("watch %s paused after %d consecutive failures",
+                    watch["id"], decision.failures)
     if result.ok and not result.not_modified:
         # Only refresh cache validators on a real 200; a 304 keeps the old ones.
         updates["etag"] = result.etag

@@ -2,8 +2,9 @@
 import pytest
 
 from monitor.statemachine import (
-    IN_STOCK, NEW_PRODUCT, OUT_OF_STOCK, PRICE_DROP, RESTOCK, UNKNOWN,
-    WATCH_FAILING, WATCH_RECOVERED, CheckResult, decide, next_interval,
+    HELD, HELD_NOTE, IN_STOCK, NEW_PRODUCT, OUT_OF_STOCK, PRICE_DROP, RESTOCK,
+    UNKNOWN, WATCH_FAILING, WATCH_RECOVERED, WATCHING, CheckResult, decide,
+    next_interval,
 )
 
 
@@ -161,3 +162,75 @@ def test_hot_interval_only_while_armed():
     assert next_interval(300, 45, hot_until_ts=200.0, now_ts=100.0) == 45
     assert next_interval(300, 45, hot_until_ts=50.0, now_ts=100.0) == 300
     assert next_interval(300, 45, hot_until_ts=None, now_ts=100.0) == 300
+
+
+# --- held: in stock, healthy, correctly silent -----------------------------
+
+def test_held_note_fires_once_on_entering_held():
+    """Silence needs a stated reason, but only one."""
+    d = _decide(prev_state=OUT_OF_STOCK,
+                result=CheckResult(ok=True, state=HELD,
+                                   extra={"available_sizes": ["XL"],
+                                          "watched_sizes": ["M"]}))
+    assert kinds(d) == [HELD_NOTE]
+    assert d.state == HELD
+
+    d2 = _decide(prev_state=HELD, result=CheckResult(ok=True, state=HELD))
+    assert kinds(d2) == [], "held must not nag while it holds"
+
+
+def test_preferred_size_arriving_later_fires_a_restock():
+    d = _decide(prev_state=HELD, result=CheckResult(ok=True, state=IN_STOCK))
+    assert kinds(d) == [RESTOCK]
+    assert d.events[0].from_state == HELD
+
+
+def test_dropping_from_in_stock_to_held_is_silent():
+    """Your size selling out is not news worth waking someone for."""
+    d = _decide(prev_state=IN_STOCK, result=CheckResult(ok=True, state=HELD))
+    assert kinds(d) == []
+    assert d.state == HELD
+
+
+def test_held_is_never_reported_as_sold_out():
+    d = _decide(prev_state=OUT_OF_STOCK, result=CheckResult(ok=True, state=HELD))
+    assert d.state != OUT_OF_STOCK
+
+
+# --- auto-pause ------------------------------------------------------------
+
+def test_watch_pauses_itself_after_the_failure_threshold():
+    failures, paused_at = 0, None
+    for i in range(1, 8):
+        d = _decide(prev_state=IN_STOCK, prev_failures=failures,
+                    result=CheckResult(ok=False, error="HTTP 410"))
+        failures = d.failures
+        if d.pause and paused_at is None:
+            paused_at = i
+    assert paused_at == 5, "should pause on the fifth consecutive failure"
+
+
+def test_a_healthy_watch_is_never_paused():
+    d = _decide(prev_state=IN_STOCK, result=CheckResult(ok=True, state=IN_STOCK))
+    assert d.pause is False
+
+
+def test_failing_alert_says_the_watch_was_paused():
+    d = _decide(prev_state=IN_STOCK, prev_failures=4,
+                result=CheckResult(ok=False, error="HTTP 410"))
+    assert d.events[0].payload["paused"] is True
+
+
+# --- drop watches ----------------------------------------------------------
+
+def test_collection_reports_watching_not_a_stock_state():
+    """A catalogue has no stock state of its own."""
+    d = decide(kind="collection", prev_state=UNKNOWN, prev_failures=0,
+               prev_baseline=None, prev_price=None,
+               result=CheckResult(ok=True, handles=["a"]))
+    assert d.state == WATCHING
+
+    d2 = decide(kind="collection", prev_state=WATCHING, prev_failures=0,
+                prev_baseline=["a"], prev_price=None,
+                result=CheckResult(ok=True, handles=[]))
+    assert d2.state == WATCHING, "an empty sweep is still watching, not sold out"
