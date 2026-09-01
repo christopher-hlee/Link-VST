@@ -26,19 +26,32 @@ ATOM_NS = {"a": "http://www.w3.org/2005/Atom"}
 _FEEDISH = re.compile(r"\.(atom|rss|xml)(\?|$)|/(feed|rss|atom)/?(\?|$)", re.I)
 
 
-def parse_keywords(raw: str | None) -> list[str]:
-    """Comma-separated, case-folded. Empty means match everything."""
-    if not raw:
-        return []
-    return [k.strip().lower() for k in raw.split(",") if k.strip()]
+def parse_keywords(raw: str | None) -> tuple[str, list[str]]:
+    """Parse a keyword expression into (mode, terms).
+
+    Two forms, because "any of these" and "all of these" are both useful and
+    only one of them was supported:
+
+        zelda, ocarina      ANY — fires on either. Good for synonyms.
+        zelda + ocarina     ALL — fires only when both appear. Good for
+                            narrowing a broad term on a busy feed.
+
+    Terms are matched as phrases, so "switch 2" matches that exact string.
+    Empty means match everything.
+    """
+    if not raw or not raw.strip():
+        return "any", []
+    if "+" in raw:
+        return "all", [k.strip().lower() for k in raw.split("+") if k.strip()]
+    return "any", [k.strip().lower() for k in raw.split(",") if k.strip()]
 
 
-def matches(text: str, keywords: list[str]) -> bool:
-    """Any keyword present. Multi-word keywords match as phrases."""
+def matches(text: str, mode: str, keywords: list[str]) -> bool:
     if not keywords:
         return True
     haystack = text.lower()
-    return any(k in haystack for k in keywords)
+    hits = (k in haystack for k in keywords)
+    return all(hits) if mode == "all" else any(hits)
 
 
 def entry_id(candidate: str | None, title: str) -> str:
@@ -108,7 +121,7 @@ def parse_shopify_search(payload: object) -> list[dict]:
 # ----------------------------------------------------------------- checking
 
 async def check(watch: dict) -> CheckResult:
-    keywords = parse_keywords(watch.get("target_ref"))
+    mode, keywords = parse_keywords(watch.get("target_ref"))
     resp = await fetch(watch["url"], etag=watch.get("etag"),
                        last_modified=watch.get("last_modified"))
 
@@ -130,7 +143,7 @@ async def check(watch: dict) -> CheckResult:
                            error=f"could not parse as feed or JSON: {exc}")
 
     hits = [e for e in entries
-            if matches(f"{e['title']} {e['summary']}", keywords)]
+            if matches(f"{e['title']} {e['summary']}", mode, keywords)]
 
     return CheckResult(
         ok=True,
@@ -146,6 +159,10 @@ async def check(watch: dict) -> CheckResult:
             "entries_seen": len(entries),
             "matches": len(hits),
             "keywords": keywords,
+            "keyword_mode": mode,
+            # An announcement is news, not a catalogue: the alert copy and the
+            # link target both differ from a storefront drop.
+            "is_announcement": True,
             # Titles are what the alert actually shows, keyed by entry id so the
             # collection diff can name the new arrivals.
             "titles": {e["id"]: e["title"] for e in hits},

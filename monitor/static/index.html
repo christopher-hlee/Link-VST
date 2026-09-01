@@ -526,8 +526,12 @@ function openAdd() {
     <div id="detect"></div>
 
     <div id="kwField" class="field hide">
-      <label>Keywords <span style="color:var(--dim)">comma separated</span></label>
-      <input type="text" id="aKw" placeholder="zelda, switch 2">
+      <label>Keywords <span style="color:var(--dim)">a, b = either · a + b = both</span></label>
+      <input type="text" id="aKw" placeholder="zelda + ocarina">
+      <div class="warn">On a busy feed, prefer <b>+</b>. A single broad term like
+        <b>switch 2</b> on a Switch&nbsp;2 news site matches nearly every article,
+        and you'll get an alert an hour. <b>zelda + ocarina</b> fires only when
+        both words appear.</div>
     </div>
 
     <div id="sizeField" class="field">

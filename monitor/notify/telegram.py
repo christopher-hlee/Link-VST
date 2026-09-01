@@ -102,16 +102,34 @@ def render(watch: dict, kind: str, payload: dict) -> str:
     if kind == NEW_PRODUCT:
         handles = payload.get("handles") or []
         titles = payload.get("titles") or {}
-        lines.append(f"<b>🆕 {len(handles)} new from {_esc(brand or title)}</b>")
+        n = len(handles)
+
+        # A feed match and a storefront drop are both "something new appeared",
+        # but calling a news article a product — and counting a feed's entries
+        # as a catalogue — reads as a bug even when the alert is correct.
+        if payload.get("is_announcement"):
+            terms = payload.get("keywords") or []
+            joined = (" + " if payload.get("keyword_mode") == "all" else ", ").join(terms)
+            lines.append(f"<b>🆕 {n} match{'' if n == 1 else 'es'}"
+                         f"{' — ' + _esc(joined) if joined else ''}</b>")
+            if brand:
+                lines.append(f"<b>{_esc(brand)}</b>")
+            for h in handles[:10]:
+                lines.append(f"· {_esc(titles.get(h) or h)}")
+            if n > 10:
+                lines.append(f"· …and {n - 10} more")
+            return "\n".join(lines)
+
+        lines.append(f"<b>🆕 {n} new from {_esc(brand or title)}</b>")
         lines.append("Not in the catalogue an hour ago:")
         for h in handles[:10]:
             lines.append(f"· {_esc(titles.get(h) or h)}")
-        if len(handles) > 10:
-            lines.append(f"· …and {len(handles) - 10} more")
+        if n > 10:
+            lines.append(f"· …and {n - 10} more")
         before = payload.get("baseline_count")
         if before is not None:
             lines.append("")
-            lines.append(f"<code>{before} → {before + len(handles)} products</code>")
+            lines.append(f"<code>{before} → {before + n} products</code>")
         return "\n".join(lines)
 
     if kind == PRICE_DROP:
@@ -177,6 +195,20 @@ def _keyboard(watch: dict, payload: dict) -> dict | None:
     its own permalink and the choice stays with the person.
     """
     rows: list[list[dict]] = []
+
+    # An announcement's useful link is the matched article, not the feed the
+    # match came from. Linking to the feed makes the alert unactionable.
+    if payload.get("is_announcement"):
+        links = payload.get("links") or {}
+        titles = payload.get("titles") or {}
+        for h in (payload.get("handles") or [])[:4]:
+            url = links.get(h)
+            if url:
+                label = (titles.get(h) or "Read it")[:40]
+                rows.append([{"text": f"📰 {label}", "url": url}])
+        if not rows and watch.get("url"):
+            rows.append([{"text": "Open the feed", "url": watch["url"]}])
+        return {"inline_keyboard": rows} if rows else None
 
     offers = payload.get("matched_offers") or payload.get("offers") or []
     sized = [o for o in offers if o.get("cart_url") and o.get("title")

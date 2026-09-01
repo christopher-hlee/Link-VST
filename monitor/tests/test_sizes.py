@@ -211,3 +211,36 @@ def test_new_drop_lists_products_and_the_count_change():
     assert "<b>🆕 2 new from Satisfy</b>" in body
     assert '· Justice Short 8"' in body
     assert "<code>214 → 216 products</code>" in body
+
+
+# --- announcement alerts read as news, not as a storefront -----------------
+
+def test_announcement_alert_does_not_call_articles_products():
+    body = telegram.render(
+        {"name": "feed", "brand": "Nintendo Life"}, "new_product",
+        {"is_announcement": True, "keyword_mode": "all",
+         "keywords": ["zelda", "ocarina"],
+         "handles": ["a2"], "titles": {"a2": "Ocarina Of Time Remake Dated"}})
+    assert "product" not in body.lower(), "a news article is not a product"
+    assert "catalogue" not in body.lower()
+    assert "zelda + ocarina" in body
+    assert "Ocarina Of Time Remake Dated" in body
+
+
+def test_announcement_button_links_to_the_article_not_the_feed():
+    """Linking to the feed makes the alert unactionable."""
+    kb = telegram._keyboard(
+        {"url": "https://www.nintendolife.com/feeds/latest"},
+        {"is_announcement": True, "handles": ["a2"],
+         "titles": {"a2": "Ocarina Of Time Remake Dated"},
+         "links": {"a2": "https://www.nintendolife.com/news/ocarina"}})["inline_keyboard"]
+    urls = [b["url"] for row in kb for b in row]
+    assert urls == ["https://www.nintendolife.com/news/ocarina"]
+    assert "feeds/latest" not in urls[0]
+
+
+def test_announcement_falls_back_to_the_feed_when_an_entry_has_no_link():
+    kb = telegram._keyboard(
+        {"url": "https://feed.example/x.xml"},
+        {"is_announcement": True, "handles": ["a1"], "titles": {}, "links": {}})["inline_keyboard"]
+    assert [b["text"] for row in kb for b in row] == ["Open the feed"]

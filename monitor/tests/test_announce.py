@@ -231,3 +231,63 @@ async def test_new_announcement_alerts_once(temp_db, monkeypatch):
     # And does not fire again on subsequent polls.
     await scheduler.check_watch(db.get_watch(wid))
     assert len(sent) == 1
+
+
+# --- keyword modes ---------------------------------------------------------
+
+@pytest.mark.parametrize("raw,mode,terms", [
+    ("zelda, switch 2", "any", ["zelda", "switch 2"]),
+    ("zelda + ocarina", "all", ["zelda", "ocarina"]),
+    ("Zelda + Ocarina Of Time", "all", ["zelda", "ocarina of time"]),
+    ("", "any", []),
+    (None, "any", []),
+    ("   ", "any", []),
+])
+def test_keyword_expression_parsing(raw, mode, terms):
+    assert announce.parse_keywords(raw) == (mode, terms)
+
+
+ARTICLES = [
+    'Review: Metal Gear Solid: Master Collection Vol. 2 (Switch 2)',
+    'CD Projekt Red "Very Happy" With Cyberpunk 2077 Sales On Switch 2',
+    'Zelda: Ocarina Of Time Remake Gets A Release Date',
+]
+
+
+def test_any_mode_matches_everything_on_a_busy_feed():
+    """The reported bug: 'switch 2' on a Switch 2 news site is not a filter."""
+    mode, terms = announce.parse_keywords("zelda, switch 2")
+    hits = [a for a in ARTICLES if announce.matches(a, mode, terms)]
+    assert len(hits) == 3, "every article mentions Switch 2 — this is the noise"
+
+
+def test_all_mode_narrows_to_the_article_that_matters():
+    mode, terms = announce.parse_keywords("zelda + ocarina")
+    hits = [a for a in ARTICLES if announce.matches(a, mode, terms)]
+    assert hits == [ARTICLES[2]]
+
+
+def test_all_mode_requires_every_term():
+    mode, terms = announce.parse_keywords("zelda + ocarina + switch 2")
+    assert announce.matches("Zelda Ocarina remake for Switch 2", mode, terms)
+    assert not announce.matches("Zelda Ocarina remake announced", mode, terms)
+
+
+def test_empty_keywords_still_match_everything():
+    mode, terms = announce.parse_keywords("")
+    assert all(announce.matches(a, mode, terms) for a in ARTICLES)
+
+
+@respx.mock
+async def test_all_mode_end_to_end_through_check():
+    respx.get(FEED).mock(return_value=httpx.Response(200, text=atom(
+        {"id": "a1", "title": "Metal Gear Solid Master Collection (Switch 2)", "summary": ""},
+        {"id": "a2", "title": "Zelda: Ocarina Of Time Remake Dated", "summary": ""},
+    ), headers={"Content-Type": "application/atom+xml"}))
+
+    r = await announce.check(watch(target_ref="zelda + ocarina"))
+
+    assert r.handles == ["a2"], "the Switch 2 article must not fire"
+    assert r.extra["keyword_mode"] == "all"
+    assert r.extra["is_announcement"] is True
+    assert r.extra["links"]["a2"].startswith("https://")

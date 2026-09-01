@@ -65,7 +65,10 @@ Auto-detected from the URL you paste — you never pick one.
 
 - **`announce`** — new entries in an Atom/RSS feed or a Shopify search endpoint,
   filtered by keyword. This is the one that can track something with no product
-  page yet; everything else presupposes a URL to poll.
+  page yet; everything else presupposes a URL to poll. Keywords take two forms:
+  `a, b` fires on either, `a + b` fires only when both appear. On a busy feed
+  the second is almost always what you want — one broad term matches everything
+  and the alert becomes noise you learn to ignore, which is worse than no alert.
 
 Both retailer APIs are commonly refused from datacenter IP ranges. That surfaces
 as a `failing` watch with the HTTP status, not as a silent wrong answer — and
