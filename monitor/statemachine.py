@@ -48,6 +48,10 @@ class CheckResult:
     etag: str | None = None
     last_modified: str | None = None
     not_modified: bool = False          # HTTP 304 — nothing changed
+    # The host asked us to slow down. Not a broken watch, and emphatically not
+    # grounds for pausing one: complying means polling less, not stopping.
+    rate_limited: bool = False
+    retry_after: float | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -68,6 +72,7 @@ class Decision:
     baseline: list[str] | None = None   # new handle baseline, collection watches
     price: float | None = None
     pause: bool = False                 # stop polling: too many failures in a row
+    defer_seconds: float | None = None  # push the next poll out this far
 
 
 def decide(
@@ -81,6 +86,15 @@ def decide(
     failure_threshold: int = 5,
 ) -> Decision:
     """Fold a check result into a new persisted state plus any events to fire."""
+    if result.rate_limited:
+        # Change nothing. A rate limit says nothing about stock, nothing about
+        # the watch's health, and counting it as a failure would eventually
+        # pause a perfectly good watch for the crime of being polled too often
+        # — a self-inflicted outage from a recoverable condition.
+        return Decision(state=prev_state, failures=prev_failures,
+                        baseline=prev_baseline, price=prev_price,
+                        defer_seconds=result.retry_after)
+
     if not result.ok:
         return _decide_failure(prev_state, prev_failures, prev_baseline,
                                prev_price, result, failure_threshold)

@@ -123,7 +123,9 @@ async def _check_product(watch: dict) -> CheckResult:
                            last_modified=resp.last_modified,
                            http_status=304)
     if not resp.ok:
-        return CheckResult(ok=False, http_status=resp.status, error=resp.error)
+        return CheckResult(ok=False, http_status=resp.status, error=resp.error,
+                           rate_limited=resp.rate_limited,
+                           retry_after=resp.retry_after)
 
     data = resp.json
     if not isinstance(data, dict):
@@ -202,6 +204,13 @@ async def _check_collection(watch: dict) -> CheckResult:
     if resp.not_modified:
         return CheckResult(ok=True, not_modified=True, etag=resp.etag,
                            last_modified=resp.last_modified, http_status=304)
+
+    if resp.rate_limited:
+        # Falling back to the Atom feed here would be a second request to a host
+        # that just asked for fewer. The fallback exists for a gated endpoint,
+        # not for backpressure.
+        return CheckResult(ok=False, http_status=429, rate_limited=True,
+                           retry_after=resp.retry_after, error=resp.error)
 
     if resp.ok and isinstance(resp.json, dict):
         products = resp.json.get("products") or []

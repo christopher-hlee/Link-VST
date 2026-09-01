@@ -69,6 +69,20 @@ async def check_watch(watch: dict) -> bool:
         utcnow().timestamp(),
     )
 
+    if result.rate_limited:
+        # Back off to at least double the normal interval, or whatever
+        # Retry-After asked for, whichever is longer. Capped so a watch cannot
+        # be deferred into effective silence by one bad afternoon.
+        wait = max(decision.defer_seconds or 0, interval * 2)
+        wait = min(wait, 3600)
+        db.update_watch(watch["id"], last_checked_at=stamp(),
+                        next_check_at=stamp_in(jittered(wait)),
+                        last_error=f"rate limited — backing off {int(wait)}s")
+        db.record_check(watch["id"], ok=False, state=None, http_status=429,
+                        latency_ms=None, error="HTTP 429 — rate limited")
+        log.warning("watch %s rate limited; next check in %ds", watch["id"], int(wait))
+        return result.ok
+
     updates = {
         "last_state": decision.state,
         "consecutive_failures": decision.failures,

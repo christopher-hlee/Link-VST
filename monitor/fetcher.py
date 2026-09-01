@@ -112,6 +112,18 @@ class FetchResponse:
     not_modified: bool = False
     error: str | None = None
     latency_ms: int = 0
+    rate_limited: bool = False
+    retry_after: float | None = None
+
+
+def parse_retry_after(value: str | None) -> float | None:
+    """Seconds from a Retry-After header. Ignores the HTTP-date form."""
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        return None
 
 
 async def fetch(url: str, *, etag: str | None = None,
@@ -169,8 +181,18 @@ async def fetch(url: str, *, etag: str | None = None,
                     latency_ms=latency,
                 )
 
-            # Rate limited or server-side: back off and retry.
-            if resp.status_code in (429, 500, 502, 503, 504):
+            # 429 is the server telling us to slow down. Retrying it here is
+            # the exact opposite of complying, and turns one poll into three
+            # requests against a host that just asked for fewer. Return at once
+            # and let the scheduler defer the next poll instead.
+            if resp.status_code == 429:
+                return FetchResponse(
+                    ok=False, status=429, latency_ms=latency, rate_limited=True,
+                    retry_after=parse_retry_after(resp.headers.get("Retry-After")),
+                    error="HTTP 429 — rate limited")
+
+            # Server-side faults are worth one more try.
+            if resp.status_code in (500, 502, 503, 504):
                 last_error = f"HTTP {resp.status_code}"
                 if attempt < retries:
                     await asyncio.sleep(_backoff(attempt, resp.headers.get("Retry-After")))

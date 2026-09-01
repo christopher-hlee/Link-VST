@@ -129,7 +129,9 @@ async def check(watch: dict) -> CheckResult:
         return CheckResult(ok=True, not_modified=True, etag=resp.etag,
                            last_modified=resp.last_modified, http_status=304)
     if not resp.ok:
-        return CheckResult(ok=False, http_status=resp.status, error=resp.error)
+        return CheckResult(ok=False, http_status=resp.status, error=resp.error,
+                           rate_limited=resp.rate_limited,
+                           retry_after=resp.retry_after)
 
     try:
         if resp.json is not None:

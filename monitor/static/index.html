@@ -232,6 +232,15 @@ function derive(w) {
   return w.last_state || 'unknown';
 }
 const isArmed = w => w.hot_until && new Date(w.hot_until.replace(' ', 'T') + 'Z') > new Date();
+/* A rate-limited watch is healthy and deliberately polling less. It keeps its
+   state, so without this it would look completely normal and the reason for the
+   slower cadence would be invisible. */
+const isBackingOff = w => (w.consecutive_failures || 0) === 0
+  && /rate limited/i.test(w.last_error || '');
+const backoffBadge = () =>
+  `<span class="state-eyebrow" style="color:var(--armed);letter-spacing:.18em"` +
+  ` title="The store asked for fewer requests. Polling has slowed; nothing is broken.">` +
+  `${GLYPH.paused}Backing off</span>`;
 const realSizes = w => (w.available_sizes || []).filter(s => s && !/^default/i.test(s));
 
 function ago(ts) {
@@ -306,6 +315,7 @@ function actRow(w) {
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
         ${eyebrowFor('in_stock', (watched ? 'your size · ' : '') + ago(w.last_checked_at))}
         ${isArmed(w) ? armedBadge() : ''}
+        ${isBackingOff(w) ? backoffBadge() : ''}
       </div>
       <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
         <span class="name">${esc(w.last_title || w.name)}</span>
@@ -392,7 +402,9 @@ function waitRow(w) {
   if (w.kind === 'collection' && w.baseline_json) {
     try { tracked = ' · ' + JSON.parse(w.baseline_json).length + ' tracked'; } catch (e) {}
   }
-  const status = armed
+  const status = isBackingOff(w)
+    ? `<span class="s" style="color:var(--armed)" title="${esc(w.last_error)}">${GLYPH.paused}Backing off</span>`
+    : armed
     ? `<span class="s" style="color:var(--armed)"><span class="pulse" style="display:inline-flex">${GLYPH.armed}</span>Armed${esc(tracked)}</span>`
     : `<span class="s" style="color:${INK[st]}">${['unknown', 'watching', 'paused'].includes(st) ? GLYPH[st] : ''}${esc(WORD[st])}${esc(tracked)}</span>`;
   const size = w.size_pref
