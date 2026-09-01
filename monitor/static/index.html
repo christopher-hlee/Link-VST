@@ -313,7 +313,13 @@ function actRow(w) {
       </div>
       <span class="meta">${bits.join(' · ')}</span>
     </div>
-    <div style="display:flex;flex-direction:column;gap:9px">${action}</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      ${action}
+      <div class="actions" style="gap:14px">
+        <button class="btn-text" style="color:var(--muted)" onclick="edit(${w.id})">Edit</button>
+        <button class="btn-text" style="color:var(--muted)" onclick="detail(${w.id})">Details</button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -338,6 +344,7 @@ function heldRow(w) {
     <div class="actions">
       ${first ? `<button class="btn-text" style="color:var(--accent)"
         onclick="alsoAlert(${w.id},'${esc(first)}')">Also alert on ${esc(first)}</button>` : ''}
+      <button class="btn-text" style="color:var(--muted)" onclick="edit(${w.id})">Edit</button>
       <button class="btn-text" style="color:var(--muted)" onclick="detail(${w.id})">Details</button>
     </div>
   </div>`;
@@ -370,7 +377,8 @@ function brokenRow(w) {
         · ${n} failure${n === 1 ? '' : 's'}${stale}</span>
     </div>
     <div class="actions">
-      <button class="btn-text" style="color:var(--accent)" onclick="checkNow(${w.id},this)">Check now</button>
+      <button class="btn-text" style="color:var(--accent)" onclick="edit(${w.id})">Fix URL</button>
+      <button class="btn-text" style="color:var(--muted)" onclick="checkNow(${w.id},this)">Check now</button>
       <button class="btn-text" style="color:var(--muted)"
         onclick="togglePause(${w.id},${w.paused ? 1 : 0})">${w.paused ? 'Resume' : 'Pause'}</button>
     </div>
@@ -393,7 +401,9 @@ function waitRow(w) {
     <span class="n"><span class="k">${esc(w.brand || '')}</span>${esc(w.last_title || w.name)}${size}</span>
     ${status}
     <span class="p">${w.last_price != null ? money(w.last_price) : '—'}</span>
-    <span class="t">${esc(ago(w.last_checked_at))} · ${esc(every(w))}</span>
+    <span class="t">${esc(ago(w.last_checked_at))} · ${esc(every(w))}
+      <button class="btn-text" style="color:var(--dim);margin-left:12px"
+        onclick="edit(${w.id})">Edit</button></span>
   </div>`;
 }
 
@@ -490,6 +500,108 @@ async function detail(id) {
     <div class="sheet-actions"><button class="btn-ghost" onclick="closeSheet()">Close</button></div>
   </div>`;
   $('add').classList.remove('hide');
+}
+
+async function edit(id) {
+  const w = (await api('/watches/' + id)).watch;
+  const isAnnounce = w.strategy === 'announce';
+  const tier = w.base_interval_s <= 45 ? 'fast' : w.base_interval_s >= 900 ? 'slow' : 'base';
+
+  $('add').innerHTML = `<div class="sheet">
+    <h2>Edit watch</h2>
+    <p class="sub">${esc(w.brand || '')} · ${esc(w.last_title || w.name)}</p>
+
+    <div class="field" style="margin-top:0">
+      <label>Name</label>
+      <input type="text" id="eName" value="${esc(w.name)}">
+    </div>
+
+    <div class="field">
+      <label>Url <span style="color:var(--dim)">${esc(w.strategy)} · ${esc(w.kind)}</span></label>
+      <input type="url" id="eUrl" value="${esc(w.url)}">
+    </div>
+
+    ${isAnnounce ? `<div class="field">
+      <label>Keywords <span style="color:var(--dim)">a, b = either · a + b = both</span></label>
+      <input type="text" id="eKw" value="${esc(w.target_ref || '')}">
+      <div class="warn">On a busy feed, prefer <b>+</b>. One broad term matches
+        nearly everything and the alerts become noise you learn to ignore.</div>
+    </div>` : `<div class="field">
+      <label>Size preference <span style="color:var(--dim)">blank = any size</span></label>
+      <input type="text" id="eSize" value="${esc(w.size_pref || '')}" placeholder="m, l">
+      <div class="warn">Naming a size silences every other size — the list will
+        label it <b>held, not your size</b> rather than going quiet unexplained.</div>
+    </div>`}
+
+    <div class="field">
+      <label>How often</label>
+      <div class="seg" id="eSeg">
+        <button aria-pressed="${tier === 'fast'}" data-tier="fast">45s</button>
+        <button aria-pressed="${tier === 'base'}" data-tier="base">5m</button>
+        <button aria-pressed="${tier === 'slow'}" data-tier="slow">15m</button>
+      </div>
+    </div>
+
+    <div id="eWarn"></div>
+
+    <div class="sheet-actions">
+      <button class="btn-accent" id="eSave" onclick="saveEdit(${id})">Save changes</button>
+      <button class="btn-text" style="color:var(--muted)" onclick="closeSheet()">Cancel</button>
+      <button class="btn-text" style="color:var(--muted)"
+        onclick="togglePause(${id},${w.paused ? 1 : 0}).then(closeSheet)">
+        ${w.paused ? 'Resume watching' : 'Pause watching'}</button>
+      <button class="btn-text" style="color:var(--failing);margin-left:auto"
+        onclick="removeWatch(${id})">Delete</button>
+      <span id="eErr" style="font-size:12px;color:var(--failing)"></span>
+    </div>
+  </div>`;
+  $('add').classList.remove('hide');
+
+  /* Say up front that a URL or keyword change starts over — otherwise the
+     watch silently goes quiet for a cycle and looks broken. */
+  const original = {url: w.url, kw: w.target_ref || ''};
+  const flag = () => {
+    const changed = $('eUrl').value.trim() !== original.url
+      || (isAnnounce && $('eKw').value.trim() !== original.kw);
+    $('eWarn').innerHTML = changed
+      ? `<div class="warn">This changes what the watch is looking at, so it
+         starts over: the baseline is cleared and the next check re-reads from
+         scratch. You won't be alerted about anything already there.</div>` : '';
+  };
+  $('eUrl').addEventListener('input', flag);
+  if (isAnnounce) $('eKw').addEventListener('input', flag);
+  [...$('eSeg').children].forEach(b => b.onclick = () =>
+    [...$('eSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b)));
+}
+
+async function saveEdit(id) {
+  const seg = [...$('eSeg').children].find(b => b.getAttribute('aria-pressed') === 'true');
+  const body = {
+    name: $('eName').value.trim(),
+    url: $('eUrl').value.trim(),
+    tier: seg ? seg.dataset.tier : 'base',
+  };
+  if ($('eKw')) body.target_ref = $('eKw').value.trim();
+  if ($('eSize')) body.size_pref = $('eSize').value.trim() || null;
+
+  $('eSave').disabled = true;
+  try {
+    const out = await api('/watches/' + id, {method: 'PATCH', body: JSON.stringify(body)});
+    closeSheet();
+    toast(out.rebaselined ? 'Saved. Baseline cleared — re-reading from scratch.'
+                          : 'Saved.', 'good');
+    refresh();
+  } catch (e) { $('eErr').textContent = e.message; }
+  finally { $('eSave').disabled = false; }
+}
+
+async function removeWatch(id) {
+  const w = WATCHES.find(x => x.id === id);
+  if (!confirm(`Delete "${(w && (w.last_title || w.name)) || id}"? Its history goes too.`)) return;
+  await api('/watches/' + id, {method: 'DELETE'});
+  closeSheet();
+  toast('Deleted.', 'good');
+  refresh();
 }
 
 /* ---------- add a watch: three intents, then only the fields that intent uses ---------- */

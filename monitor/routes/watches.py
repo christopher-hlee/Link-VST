@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from .. import db, scheduler, strategies
 from ..config import INTERVAL_BASE, INTERVAL_HOT, INTERVAL_SLOW
+from ..statemachine import UNKNOWN
 from ..timeutil import EPOCH, stamp_in
 
 router = APIRouter()
@@ -27,11 +28,20 @@ class WatchCreate(BaseModel):
 class WatchUpdate(BaseModel):
     name: str | None = None
     brand: str | None = None
+    url: str | None = None
+    target_ref: str | None = None      # keywords for announce, handle otherwise
     store_ref: str | None = None
     size_pref: str | None = None
     tier: str | None = None
     alert_level: str | None = None
     enabled: bool | None = None
+
+
+# Changing any of these changes what the watch is looking at, which invalidates
+# the baseline it has been comparing against.
+REBASELINE_FIELDS = {"url", "target_ref"}
+# Changing these changes what counts as a match, so the current state is stale.
+RECHECK_FIELDS = REBASELINE_FIELDS | {"size_pref"}
 
 
 class ArmRequest(BaseModel):
@@ -95,20 +105,44 @@ async def create_watch(body: WatchCreate):
 
 @router.patch("/watches/{watch_id}")
 def update_watch(watch_id: int, body: WatchUpdate):
-    if not db.get_watch(watch_id):
+    current = db.get_watch(watch_id)
+    if not current:
         raise HTTPException(404, "No such watch")
 
-    fields = body.model_dump(exclude_none=True)
+    # exclude_unset, not exclude_none: clearing a size preference back to "any
+    # size" means sending null, and exclude_none would silently drop it.
+    fields = body.model_dump(exclude_unset=True)
+
     tier = fields.pop("tier", None)
-    if tier:
+    if tier is not None:
         if tier not in TIERS:
             raise HTTPException(400, f"tier must be one of {sorted(TIERS)}")
         fields["base_interval_s"] = TIERS[tier]
     if "enabled" in fields:
         fields["enabled"] = 1 if fields["enabled"] else 0
+        if fields["enabled"]:
+            # Resuming a watch that auto-paused after repeated failures has to
+            # clear the counter, or it re-pauses on the very next tick.
+            fields["consecutive_failures"] = 0
+    if fields.get("url") is not None and not str(fields["url"]).startswith(("http://", "https://")):
+        raise HTTPException(400, "URL must start with http:// or https://")
+
+    changed = {k for k in fields if k in RECHECK_FIELDS
+               and (fields[k] or None) != (current.get(k) or None)}
+
+    if changed & REBASELINE_FIELDS:
+        # The watch is now looking at something else. Comparing against the old
+        # baseline would either miss real arrivals or, on a broadened keyword,
+        # report every previously-ignored entry as new.
+        fields["baseline_json"] = None
+        fields["last_state"] = UNKNOWN
+        fields["consecutive_failures"] = 0
+        fields["last_error"] = None
+    if changed:
+        fields["next_check_at"] = EPOCH
 
     db.update_watch(watch_id, **fields)
-    return {"watch": db.get_watch(watch_id)}
+    return {"watch": db.get_watch(watch_id), "rebaselined": bool(changed & REBASELINE_FIELDS)}
 
 
 @router.delete("/watches/{watch_id}")
