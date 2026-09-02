@@ -4,6 +4,7 @@ import pytest
 import respx
 
 from monitor import db, scheduler
+from monitor.notify import telegram
 from monitor.statemachine import IN_STOCK, OUT_OF_STOCK, RESTOCK, UNKNOWN
 
 STORE = "https://option-o.com"
@@ -171,6 +172,38 @@ async def test_collection_new_drop_alerts(sent):
 
     assert [c["kind"] for c in sent] == ["new_product"]
     assert sent[0]["payload"]["handles"] == ["new-short"]
+
+
+@respx.mock
+async def test_a_drop_alert_links_to_the_new_product_not_the_collection(sent):
+    """The whole chain: sweep -> diff -> stored event -> outbound keyboard."""
+    watch_id = db.create_watch(name="Satisfy new arrivals", brand="Satisfy",
+                               url=f"{STORE}/collections/new", strategy="shopify",
+                               kind="collection", target_ref="new")
+    route = respx.get(url__startswith=f"{STORE}/collections/new/products.json")
+    old = {"handle": "old-tee", "title": "Old Tee",
+           "variants": [{"id": 1, "title": "M", "available": True, "price": "40.00"}]}
+
+    route.mock(return_value=httpx.Response(200, json={"products": [old]}))
+    await scheduler.check_watch(db.get_watch(watch_id))
+
+    route.mock(return_value=httpx.Response(200, json={"products": [old, {
+        "handle": "climb-pants", "title": "Climb Pants",
+        "variants": [
+            {"id": 222, "title": "M", "available": True, "price": "245.00"},
+            {"id": 333, "title": "L", "available": True, "price": "245.00"}]}]}))
+    await scheduler.check_watch(db.get_watch(watch_id))
+
+    payload = sent[0]["payload"]
+    assert payload["handles"] == ["climb-pants"]
+    assert list(payload["items"]) == ["climb-pants"], \
+        "the stored event must not carry the whole catalogue"
+
+    kb = telegram._keyboard(db.get_watch(watch_id), payload)
+    urls = [b["url"] for row in kb["inline_keyboard"] for b in row]
+    assert urls == [f"{STORE}/cart/222:1", f"{STORE}/cart/333:1",
+                    f"{STORE}/products/climb-pants"]
+    assert f"{STORE}/collections/new" not in urls
 
 
 def test_summary_counts():

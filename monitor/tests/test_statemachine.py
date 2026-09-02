@@ -234,3 +234,24 @@ def test_collection_reports_watching_not_a_stock_state():
                 prev_baseline=["a"], prev_price=None,
                 result=CheckResult(ok=True, handles=[]))
     assert d2.state == WATCHING, "an empty sweep is still watching, not sold out"
+
+
+def test_new_product_payload_carries_only_what_fired():
+    """A sweep describes the whole catalogue; the event is about one item."""
+    catalogue = ["old1", "old2", "fresh"]
+    d = decide(
+        kind="collection", prev_state=WATCHING, prev_failures=0,
+        prev_baseline=["old1", "old2"], prev_price=None,
+        result=CheckResult(ok=True, handles=catalogue, extra={
+            "product_count": 3,
+            "titles": {h: h.title() for h in catalogue},
+            "links": {h: f"https://s.com/products/{h}" for h in catalogue},
+            "items": {h: {"url": f"https://s.com/products/{h}"} for h in catalogue},
+        }))
+
+    payload = d.events[0].payload
+    assert payload["handles"] == ["fresh"]
+    for key in ("titles", "links", "items"):
+        assert list(payload[key]) == ["fresh"], f"{key} must not carry the catalogue"
+    assert payload["links"]["fresh"] == "https://s.com/products/fresh"
+    assert payload["product_count"] == 3, "non-per-handle values pass through"

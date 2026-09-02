@@ -137,3 +137,28 @@ def test_delete_removes_the_watch(client):
     wid = make()
     assert client.delete(f"/api/watches/{wid}").status_code == 200
     assert client.get(f"/api/watches/{wid}").status_code == 404
+
+
+# --- creating ---------------------------------------------------------------
+
+def test_pinning_a_strategy_still_produces_a_readable_name(client):
+    """Naming a strategy skips detection, which is where a name usually comes
+    from — the list would otherwise show the raw feed URL as the title."""
+    r = client.post("/api/watches", json={
+        "url": "https://www.nintendolife.com/feeds/latest",
+        "strategy": "announce", "kind": "collection",
+        "target_ref": "zelda + ocarina"})
+
+    assert r.status_code == 201, r.text
+    w = r.json()["watch"]
+    assert w["name"] == "nintendolife.com · zelda + ocarina"
+    assert w["brand"] == "nintendolife.com"
+
+
+def test_an_explicit_name_is_never_overwritten(client):
+    r = client.post("/api/watches", json={
+        "url": "https://www.nintendolife.com/feeds/latest", "name": "Zelda watch",
+        "brand": "Nintendo Life", "strategy": "announce", "kind": "collection"})
+
+    w = r.json()["watch"]
+    assert (w["name"], w["brand"]) == ("Zelda watch", "Nintendo Life")

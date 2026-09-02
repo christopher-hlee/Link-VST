@@ -244,3 +244,74 @@ def test_announcement_falls_back_to_the_feed_when_an_entry_has_no_link():
         {"url": "https://feed.example/x.xml"},
         {"is_announcement": True, "handles": ["a1"], "titles": {}, "links": {}})["inline_keyboard"]
     assert [b["text"] for row in kb for b in row] == ["Open the feed"]
+
+
+# --- a drop links to the item, never only to the page we happen to poll -----
+
+COLLECTION = "https://satisfyrunning.com/collections/shop-all"
+DROP_WATCH = {"url": COLLECTION, "brand": "satisfyrunning.com"}
+
+
+def _urls(kb):
+    return [b["url"] for row in kb["inline_keyboard"] for b in row]
+
+
+def test_one_new_item_offers_its_sizes_and_its_own_page():
+    kb = telegram._keyboard(DROP_WATCH, {
+        "handles": ["climb-pants"],
+        "titles": {"climb-pants": "PeaceShell Climb Pants"},
+        "product_url": COLLECTION,
+        "items": {"climb-pants": {
+            "url": "https://satisfyrunning.com/products/climb-pants",
+            "offers": [
+                {"title": "M", "cart_url": "https://satisfyrunning.com/cart/222:1"},
+                {"title": "L", "cart_url": "https://satisfyrunning.com/cart/333:1"}]}}})
+
+    assert _urls(kb) == ["https://satisfyrunning.com/cart/222:1",
+                         "https://satisfyrunning.com/cart/333:1",
+                         "https://satisfyrunning.com/products/climb-pants"]
+    assert COLLECTION not in _urls(kb), \
+        "the collection is what we poll, not what the person wants to open"
+
+
+def test_one_unsized_new_item_gets_a_single_cart_link():
+    kb = telegram._keyboard(DROP_WATCH, {
+        "handles": ["cup"], "titles": {"cup": "SpeedCup"},
+        "items": {"cup": {"url": "https://satisfyrunning.com/products/cup",
+                          "offers": [{"title": "Default Title",
+                                      "cart_url": "https://satisfyrunning.com/cart/777:1"}]}}})
+
+    assert [b["text"] for row in kb["inline_keyboard"] for b in row] == [
+        "⚡ Add to cart", "Open product page"]
+
+
+def test_several_new_items_get_one_button_each():
+    handles = ["a", "b", "c"]
+    kb = telegram._keyboard(DROP_WATCH, {
+        "handles": handles,
+        "titles": {h: h.upper() for h in handles},
+        "links": {h: f"https://satisfyrunning.com/products/{h}" for h in handles}})
+
+    urls = _urls(kb)
+    assert urls == [f"https://satisfyrunning.com/products/{h}" for h in handles], \
+        "every named item must be reachable in one tap"
+    assert COLLECTION not in urls
+
+
+def test_a_long_drop_caps_the_buttons_and_offers_the_store():
+    handles = [f"p{i}" for i in range(12)]
+    kb = telegram._keyboard(DROP_WATCH, {
+        "handles": handles, "titles": {h: h for h in handles},
+        "links": {h: f"https://satisfyrunning.com/products/{h}" for h in handles}})
+
+    urls = _urls(kb)
+    assert len(urls) == telegram.MAX_ITEM_BUTTONS + 1
+    assert urls[-1] == COLLECTION, "the overflow needs somewhere to go"
+    assert "See all 12" in kb["inline_keyboard"][-1][0]["text"]
+
+
+def test_a_drop_with_no_item_links_still_opens_the_store():
+    """Legacy events, and Atom entries with no href, must not lose the button."""
+    kb = telegram._keyboard(DROP_WATCH, {"handles": ["a", "b"], "titles": {}})
+
+    assert _urls(kb) == [COLLECTION]

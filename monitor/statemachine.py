@@ -184,7 +184,8 @@ def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
     if fresh:
         events.append(Event(kind=NEW_PRODUCT, from_state=prev_state,
                             to_state=WATCHING,
-                            payload={**_payload(result), "handles": fresh,
+                            payload={**_prune(_payload(result), fresh),
+                                     "handles": fresh,
                                      # What the catalogue held before this sweep,
                                      # so the alert can say "214 -> 217".
                                      "baseline_count": len(known)}))
@@ -193,6 +194,26 @@ def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
     # when it comes back.
     return Decision(state=WATCHING, failures=0, events=events,
                     baseline=sorted(known | set(handles)))
+
+
+# Per-handle maps a strategy returns for the whole catalogue. Only the handles
+# that actually fired belong in the stored event.
+_PER_HANDLE_KEYS = ("titles", "links", "items")
+
+
+def _prune(payload: dict[str, Any], fresh: list[str]) -> dict[str, Any]:
+    """Narrow the catalogue-wide maps to the handles this event is about.
+
+    A collection sweep carries a title, link and item record for all 250-odd
+    products. Storing that whole catalogue on every alert bloats the row by two
+    orders of magnitude to say something about two items.
+    """
+    keep = set(fresh)
+    return {
+        key: ({h: v for h, v in value.items() if h in keep}
+              if key in _PER_HANDLE_KEYS and isinstance(value, dict) else value)
+        for key, value in payload.items()
+    }
 
 
 def _payload(result: CheckResult) -> dict[str, Any]:

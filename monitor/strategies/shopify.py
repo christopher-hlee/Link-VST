@@ -101,6 +101,47 @@ def _price(raw, *, in_cents: bool) -> float | None:
     return value / 100.0 if in_cents else value
 
 
+def _image_url(raw) -> str | None:
+    """Shopify serves protocol-relative image URLs; a bare // breaks an <img>."""
+    if isinstance(raw, dict):
+        raw = raw.get("src")
+    if not isinstance(raw, str):
+        return None
+    return "https:" + raw if raw.startswith("//") else raw
+
+
+def _collection_item(base: str, product: dict) -> dict:
+    """Everything an alert needs about one catalogue entry, from data in hand.
+
+    products.json already returns variants and images per product, so the cart
+    permalinks cost nothing extra — the alternative is a second request per new
+    product at exactly the moment a drop makes the store busiest.
+    """
+    handle = product.get("handle")
+    variants = product.get("variants") or []
+    # products.json has no `available` on some themes; treat a missing flag as
+    # available rather than silently dropping every cart link.
+    live = [v for v in variants if v.get("available", True) and v.get("id")]
+    offers = [
+        {
+            "id": v.get("id"),
+            "title": v.get("title"),
+            "price": _price(v.get("price"), in_cents=False),
+            "cart_url": cart_url(base, v.get("id")),
+            "preferred": False,
+        }
+        for v in live
+    ]
+    images = product.get("images") or []
+    return {
+        "url": f"{base}/products/{handle}",
+        "title": product.get("title"),
+        "price": offers[0]["price"] if offers else None,
+        "image": _image_url(images[0] if images else None),
+        "offers": offers[:12],
+    }
+
+
 # ------------------------------------------------------------------ checking
 
 async def check(watch: dict) -> CheckResult:
@@ -214,10 +255,13 @@ async def _check_collection(watch: dict) -> CheckResult:
 
     if resp.ok and isinstance(resp.json, dict):
         products = resp.json.get("products") or []
+        handles = [p.get("handle") for p in products if p.get("handle")]
+        items = {p["handle"]: _collection_item(base, p)
+                 for p in products if p.get("handle")}
         return CheckResult(
             ok=True,
             state=IN_STOCK if products else OUT_OF_STOCK,
-            handles=[p.get("handle") for p in products if p.get("handle")],
+            handles=handles,
             title=watch.get("name"),
             product_url=watch["url"],
             http_status=resp.status,
@@ -225,7 +269,13 @@ async def _check_collection(watch: dict) -> CheckResult:
             last_modified=resp.last_modified,
             extra={"product_count": len(products),
                    "source": "products.json",
-                   "titles": {p.get("handle"): p.get("title") for p in products}},
+                   "titles": {h: items[h]["title"] for h in items},
+                   # The handle is the store's own canonical identifier, so the
+                   # product URL is derivable with no search and no extra
+                   # request. An alert that names an item but links to the
+                   # collection makes the reader hunt for what we already knew.
+                   "links": {h: items[h]["url"] for h in items},
+                   "items": items},
         )
 
     # products.json blocked or unparseable — try the Atom feed instead.
@@ -248,7 +298,7 @@ async def _check_collection_atom(base: str, coll: str | None, watch: dict,
         return CheckResult(ok=False, http_status=resp.status,
                            error=f"atom parse error: {exc}")
 
-    handles, titles = [], {}
+    handles, titles, links, items = [], {}, {}, {}
     for entry in root.findall("a:entry", _ATOM_NS):
         link = entry.find("a:link", _ATOM_NS)
         href = link.get("href") if link is not None else None
@@ -256,7 +306,13 @@ async def _check_collection_atom(base: str, coll: str | None, watch: dict,
         if handle:
             handles.append(handle)
             title_el = entry.find("a:title", _ATOM_NS)
-            titles[handle] = title_el.text if title_el is not None else None
+            title = title_el.text if title_el is not None else None
+            titles[handle] = title
+            # The feed carries no variants and no prices, so an item here can
+            # only ever open the product page — never a cart permalink.
+            links[handle] = href
+            items[handle] = {"url": href, "title": title,
+                             "price": None, "image": None, "offers": []}
 
     return CheckResult(
         ok=True,
@@ -264,7 +320,8 @@ async def _check_collection_atom(base: str, coll: str | None, watch: dict,
         handles=handles,
         product_url=watch["url"],
         http_status=resp.status,
-        extra={"product_count": len(handles), "source": "atom", "titles": titles},
+        extra={"product_count": len(handles), "source": "atom",
+               "titles": titles, "links": links, "items": items},
     )
 
 

@@ -1,4 +1,6 @@
 """Watch CRUD, arming, and forced checks."""
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -74,6 +76,16 @@ def get_watch(watch_id: int):
     return {"watch": watch, "checks": db.list_checks(watch_id, limit=100)}
 
 
+def _host(url: str) -> str:
+    return urlparse(url).netloc.replace("www.", "") or url
+
+
+def _fallback_name(url: str, target_ref: str | None) -> str:
+    """A readable name for a watch that never went through detection."""
+    host = _host(url)
+    return f"{host} · {target_ref}" if target_ref else host
+
+
 @router.post("/watches", status_code=201)
 async def create_watch(body: WatchCreate):
     fields = body.model_dump(exclude_none=True)
@@ -95,7 +107,10 @@ async def create_watch(body: WatchCreate):
             fields.setdefault(key, detected.get(key))
 
     fields.setdefault("kind", "product")
-    fields.setdefault("name", body.url)
+    # Pinning `strategy` skips detection, which is where a name normally comes
+    # from — so a feed watch would otherwise render its raw URL as its title.
+    fields.setdefault("brand", _host(body.url))
+    fields.setdefault("name", _fallback_name(body.url, fields.get("target_ref")))
     fields["base_interval_s"] = TIERS[tier]
     fields["next_check_at"] = EPOCH
 

@@ -20,6 +20,22 @@ promoted. Sold-out sizes are absent rather than disabled — a greyed button
 invites a tap that cannot work. Single-variant products collapse to one
 "Add to cart".
 
+A drop that has fired gets its own card above the list, naming each new item
+with its price and a cart link, because the watch itself goes straight back to
+watching and would otherwise show nothing. Cards clear after 48 hours or when
+dismissed. Below everything, **Recent alerts** lists every alert sent, so the
+dashboard can be checked against Telegram instead of only agreeing with it.
+
+## A drop is a list; a restock is one transition
+
+They alert differently on purpose. A restock is one item changing state, so it
+gets one cart link per returned size. A drop is *n* items appearing at once, so
+it gets one link per item — each pointing at that product, never at the
+collection being polled. The handle in `products.json` is the store's own
+canonical identifier, so `{store}/products/{handle}` needs no search and no
+extra request, and the variants in that same response supply the cart
+permalinks. A drop of exactly one item is treated as a restock and gets sizes.
+
 ## The rule that shapes everything
 
 **A failed check never becomes a stock state.** A 403, a timeout, or a parse

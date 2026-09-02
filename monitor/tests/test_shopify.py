@@ -154,6 +154,64 @@ async def test_both_endpoints_failing_is_a_failure():
     assert r.ok is False and r.state is None
 
 
+@respx.mock
+async def test_collection_gives_each_product_its_own_url_and_cart_links():
+    """The handle is canonical, so no search is needed to link to a new item."""
+    respx.get(url__startswith=f"{STORE}/collections/shop-new-arrivals/products.json"
+              ).mock(return_value=httpx.Response(200, json={"products": [{
+                  "handle": "climb-pants", "title": "PeaceShell Climb Pants",
+                  "images": [{"src": "//cdn.shopify.com/s/files/climb.jpg"}],
+                  "variants": [
+                      {"id": 111, "title": "S", "available": False, "price": "245.00"},
+                      {"id": 222, "title": "M", "available": True, "price": "245.00"},
+                      {"id": 333, "title": "L", "available": True, "price": "245.00"}],
+              }]}))
+
+    r = await shopify.check(collection_watch())
+    item = r.extra["items"]["climb-pants"]
+
+    assert r.extra["links"]["climb-pants"] == f"{STORE}/products/climb-pants"
+    assert item["url"] == f"{STORE}/products/climb-pants"
+    assert item["price"] == 245.0, "products.json prices are decimal, not cents"
+    assert item["image"] == "https://cdn.shopify.com/s/files/climb.jpg"
+    # Sold-out sizes must not get a cart link — it would fail on tap.
+    assert [o["title"] for o in item["offers"]] == ["M", "L"]
+    assert item["offers"][0]["cart_url"] == f"{STORE}/cart/222:1"
+
+
+@respx.mock
+async def test_collection_keeps_cart_links_when_available_is_absent():
+    """Some themes omit `available`; dropping those would kill every cart link."""
+    respx.get(url__startswith=f"{STORE}/collections/shop-new-arrivals/products.json"
+              ).mock(return_value=httpx.Response(200, json={"products": [
+                  {"handle": "cup", "title": "SpeedCup",
+                   "variants": [{"id": 777, "title": "Default Title",
+                                 "price": "30.00"}]}]}))
+
+    r = await shopify.check(collection_watch())
+
+    assert r.extra["items"]["cup"]["offers"][0]["cart_url"] == f"{STORE}/cart/777:1"
+
+
+@respx.mock
+async def test_atom_fallback_links_items_but_has_no_prices():
+    respx.get(url__startswith=f"{STORE}/collections/shop-new-arrivals/products.json"
+              ).mock(return_value=httpx.Response(403))
+    respx.get(f"{STORE}/collections/shop-new-arrivals.atom").mock(
+        return_value=httpx.Response(200, text="""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>Alpha</title>
+    <link href="https://satisfyrunning.com/products/alpha"/></entry>
+</feed>"""))
+
+    r = await shopify.check(collection_watch())
+
+    assert r.extra["links"]["alpha"] == f"{STORE}/products/alpha"
+    item = r.extra["items"]["alpha"]
+    assert item["price"] is None and item["offers"] == [], \
+        "the feed carries no variants, so it must not invent a cart link"
+
+
 # --- detection -------------------------------------------------------------
 
 @respx.mock

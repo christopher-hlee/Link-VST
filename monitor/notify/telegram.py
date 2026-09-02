@@ -210,26 +210,92 @@ def _keyboard(watch: dict, payload: dict) -> dict | None:
             rows.append([{"text": "Open the feed", "url": watch["url"]}])
         return {"inline_keyboard": rows} if rows else None
 
-    offers = payload.get("matched_offers") or payload.get("offers") or []
-    sized = [o for o in offers if o.get("cart_url") and o.get("title")
-             and o["title"].lower() not in ("default title", "default")]
+    if payload.get("handles"):
+        return _drop_keyboard(watch, payload)
 
-    if len(sized) > 1:
-        row: list[dict] = []
-        for offer in sized[:MAX_SIZE_BUTTONS]:
-            row.append({"text": f"⚡ {offer['title']}", "url": offer["cart_url"]})
-            if len(row) == BUTTONS_PER_ROW:
-                rows.append(row)
-                row = []
-        if row:
-            rows.append(row)
-    elif payload.get("cart_url"):
+    offers = payload.get("matched_offers") or payload.get("offers") or []
+    rows.extend(_size_rows(offers))
+    if not rows and payload.get("cart_url"):
         # One variant, or a product with no size axis at all.
         rows.append([{"text": "⚡ Add to cart", "url": payload["cart_url"]}])
 
     product_url = payload.get("product_url") or watch.get("url")
     if product_url:
         rows.append([{"text": "Open product page", "url": product_url}])
+
+    return {"inline_keyboard": rows} if rows else None
+
+
+def _size_rows(offers: list[dict]) -> list[list[dict]]:
+    """One cart button per named size, wrapped into rows. [] when unsized."""
+    sized = [o for o in offers if o.get("cart_url") and o.get("title")
+             and o["title"].lower() not in ("default title", "default")]
+    if len(sized) < 2:
+        return []
+    rows, row = [], []
+    for offer in sized[:MAX_SIZE_BUTTONS]:
+        row.append({"text": f"⚡ {offer['title']}", "url": offer["cart_url"]})
+        if len(row) == BUTTONS_PER_ROW:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return rows
+
+
+MAX_ITEM_BUTTONS = 8
+
+
+def _drop_keyboard(watch: dict, payload: dict) -> dict | None:
+    """Buttons for a drop: one per newly-listed product, not one for the store.
+
+    The collection is what we poll, not what the person wants to open. Sending
+    them to the shop-all page to re-find the item we just named is the alert
+    doing the easy half of its job.
+    """
+    handles = payload.get("handles") or []
+    items = payload.get("items") or {}
+    links = payload.get("links") or {}
+    titles = payload.get("titles") or {}
+    rows: list[list[dict]] = []
+
+    def url_for(handle):
+        return (items.get(handle) or {}).get("url") or links.get(handle)
+
+    # A single new product is just a restock with no prior state: it deserves
+    # the same per-size cart buttons rather than a lone link.
+    if len(handles) == 1:
+        handle = handles[0]
+        item = items.get(handle) or {}
+        rows.extend(_size_rows(item.get("offers") or []))
+        if not rows:
+            offers = item.get("offers") or []
+            if len(offers) == 1 and offers[0].get("cart_url"):
+                rows.append([{"text": "⚡ Add to cart", "url": offers[0]["cart_url"]}])
+        target = url_for(handle)
+        if target:
+            rows.append([{"text": "Open product page", "url": target}])
+        elif watch.get("url"):
+            rows.append([{"text": "Open product page", "url": watch["url"]}])
+        return {"inline_keyboard": rows} if rows else None
+
+    # Several at once: one link each. Sizes across many products would need a
+    # keyboard nobody can read, so the product page takes the last step.
+    for handle in handles[:MAX_ITEM_BUTTONS]:
+        target = url_for(handle)
+        if target:
+            label = (titles.get(handle) or handle)[:40]
+            rows.append([{"text": f"🆕 {label}", "url": target}])
+
+    store_url = watch.get("url") or payload.get("product_url")
+    if store_url:
+        # Only worth a row once the per-item buttons exist or are incomplete.
+        if not rows:
+            rows.append([{"text": "Open product page", "url": store_url}])
+        elif len(handles) > len(rows):
+            rows.append([{"text": f"See all {len(handles)} at "
+                                  f"{watch.get('brand') or 'the store'}",
+                          "url": store_url}])
 
     return {"inline_keyboard": rows} if rows else None
 

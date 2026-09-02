@@ -91,6 +91,28 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .pulse{animation:armpulse 1.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.pulse{animation:none}}
 
+/* A drop is a LIST — one link per item — where a restock is one transition.
+   The card exists so the dashboard says the same thing the alert did. */
+.drop{border:1px solid #3a3a2c;margin:22px 0 0}
+.drop-h{display:flex;align-items:center;gap:14px;padding:14px 18px;background:#191712;
+  border-bottom:1px solid #3a3a2c;flex-wrap:wrap}
+.drop-h .ttl{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--bright)}
+.drop-h .when{margin-left:auto;font-size:11px;color:var(--muted)}
+.drop-b{padding:4px 18px 14px}
+.drop-b .why{font-size:12px;color:var(--held);padding:12px 0 4px}
+.item{display:grid;grid-template-columns:1fr 92px 108px;gap:16px;align-items:center;
+  padding:13px 0;border-top:1px solid var(--rule-faint)}
+.item .in{font-family:var(--serif);font-size:16px;color:var(--bright);line-height:1.25}
+.item .ip{font-family:var(--serif);font-size:15px;color:var(--muted)}
+.item .chip{padding:9px 0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+  font-family:var(--sans);min-height:38px}
+.feed{display:grid;grid-template-columns:96px 150px 1fr;gap:18px;align-items:baseline;
+  padding:11px 0;border-top:1px solid var(--rule-faint)}
+.feed .fw{font-size:12px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.feed .fs{font-size:12px;color:var(--muted)}
+.feed a{text-decoration:none}
+
 .empty{color:var(--dim);font-size:13px;padding:40px 0;border-top:1px solid var(--border)}
 .warn{background:#17140f;border-left:2px solid var(--armed);padding:12px 14px;
   font-size:12px;color:#c9bfae;margin:16px 0}
@@ -146,8 +168,19 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   .name{font-size:24px}
   .actions{justify-content:flex-start}
   .caption{text-align:left}
-  .wait{grid-template-columns:1fr auto;gap:8px}
+  .wait{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .wait .n{overflow-wrap:anywhere}
   .wait .p,.wait .t{display:none}
+  .item{grid-template-columns:1fr 96px;gap:10px}
+  .item .ip{display:none}
+  .feed{grid-template-columns:auto 1fr;gap:4px 12px}
+  /* Ellipsis on a 430px column leaves "www.ninte…", which names nothing.
+     Wrapping costs a line and keeps the row readable. */
+  .feed .fw{grid-column:1/-1;white-space:normal;overflow:visible}
+  .drop-h,.drop-b{padding-left:14px;padding-right:14px}
+  /* Long brand + title cannot shrink in an `auto` track, so the status span
+     pushed the whole page sideways. */
+  .wait .s{justify-self:end;text-align:right}
   .sheet{padding:24px 18px}
   .intent{grid-template-columns:22px 1fr;gap:12px}
   .intent .ex{display:none}
@@ -191,7 +224,7 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let WATCHES = [], TIMER = null, INTENT = 'restock';
+let WATCHES = [], EVENTS = [], TIMER = null, INTENT = 'restock';
 
 function toast(msg, kind = '') {
   const t = document.createElement('div');
@@ -419,6 +452,102 @@ function waitRow(w) {
   </div>`;
 }
 
+/* ---------- drops ---------- */
+
+const DROP_WINDOW_MS = 48 * 3600 * 1000;
+const SEEN_KEY = 'restock.seen';
+const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY)) || []; }
+                     catch (e) { return []; } };
+function markSeen(id) {
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen(), id].slice(-200))); }
+  catch (e) {}
+  render();
+}
+const when = ts => new Date(String(ts).replace(' ', 'T') + 'Z');
+const evName = e => e.watch_brand || e.watch_name || 'a watch';
+
+/* Events stored before per-item links existed still know their handle, and the
+   handle is all a Shopify product URL needs — so old drops become clickable
+   too rather than staying dead. */
+function itemsOf(e) {
+  const p = e.payload || {};
+  let base = '';
+  try { base = new URL(e.watch_url).origin; } catch (err) {}
+  return (p.handles || []).map(h => {
+    const it = (p.items || {})[h] || {};
+    const url = it.url || (p.links || {})[h] ||
+                (base && !p.is_announcement ? base + '/products/' + h : '');
+    const carts = (it.offers || []).filter(o => o.cart_url);
+    return {handle: h, title: it.title || (p.titles || {})[h] || h,
+            price: it.price, url, cart: carts.length === 1 ? carts[0].cart_url : ''};
+  });
+}
+
+function dropCard(e) {
+  const items = itemsOf(e);
+  if (!items.length) return '';
+  const n = items.length;
+  const announce = (e.payload || {}).is_announcement;
+  const before = (e.payload || {}).baseline_count;
+  const why = announce
+    ? 'Matched your keywords in the feed.'
+    : before != null
+    ? `Not in the ${before}-product catalogue ${ago(e.created_at)}.`
+    : 'Not in the catalogue on the previous sweep.';
+
+  const rows = items.map(it => {
+    const chip = it.cart
+      ? `<button class="chip primary" onclick="window.open('${esc(it.cart)}','_blank','noopener')">Cart</button>`
+      : it.url
+      ? `<button class="chip" onclick="window.open('${esc(it.url)}','_blank','noopener')">${announce ? 'Read' : 'Open'}</button>`
+      : '<span class="caption">no link</span>';
+    return `<div class="item">
+      <span class="in">${esc(it.title)}</span>
+      <span class="ip">${it.price != null ? money(it.price) : ''}</span>
+      ${chip}
+    </div>`;
+  }).join('');
+
+  return `<div class="drop">
+    <div class="drop-h">
+      <span style="color:var(--in-stock);display:inline-flex">${GLYPH.watching}</span>
+      <span class="ttl">${n} ${announce ? (n === 1 ? 'match' : 'matches')
+                                        : 'new'} · ${esc(evName(e))}</span>
+      <span class="when">${esc(ago(e.created_at))}
+        <button class="btn-text" style="color:var(--dim);margin-left:14px"
+          onclick="markSeen(${e.id})">Seen</button></span>
+    </div>
+    <div class="drop-b">
+      <div class="why">${esc(why)}</div>
+      ${rows}
+    </div>
+  </div>`;
+}
+
+/* One line per alert ever sent, so the dashboard can be checked against
+   Telegram instead of only agreeing with it by coincidence. */
+const FEED_WORD = {
+  restock: 'Back in stock', new_product: 'New listing', held_note: 'Held — not your size',
+  price_drop: 'Price drop', watch_failing: 'Watch broke', watch_recovered: 'Watch recovered',
+};
+function feedRow(e) {
+  const p = e.payload || {};
+  let note = p.title || '';
+  if (e.kind === 'new_product') note = (p.handles || []).map(h => (p.titles || {})[h] || h).join(', ');
+  else if (e.kind === 'price_drop') note = `${money(p.old_price)} → ${money(p.new_price)}`;
+  else if (e.kind === 'watch_failing') note = p.error || '';
+  const items = itemsOf(e);
+  const href = (items[0] || {}).url || p.product_url || e.watch_url || '';
+  const label = FEED_WORD[e.kind] || e.kind;
+  const ink = e.kind === 'watch_failing' ? 'var(--failing)'
+            : e.kind === 'restock' ? 'var(--in-stock)' : 'var(--muted)';
+  return `<div class="feed">
+    <span class="t" style="text-align:left">${esc(ago(e.created_at))}</span>
+    <span class="fs" style="color:${ink}">${esc(label)}</span>
+    <span class="fw">${href ? `<a href="${esc(href)}" target="_blank" rel="noopener">` : ''}${esc(evName(e))}${note ? ' · ' + esc(note) : ''}${href ? '</a>' : ''}</span>
+  </div>`;
+}
+
 /* ---------- the sheet ---------- */
 
 function render() {
@@ -434,21 +563,35 @@ function render() {
   act.sort((a, b) => (b.last_checked_at || '').localeCompare(a.last_checked_at || ''));
   broken.sort((a, b) => (b.consecutive_failures || 0) - (a.consecutive_failures || 0));
 
-  const n = act.length;
+  /* A drop has no lasting stock state — the collection just carries on
+     watching — so without this the two things it found would be invisible. */
+  const hidden = new Set(seen());
+  const cutoff = Date.now() - DROP_WINDOW_MS;
+  const drops = EVENTS.filter(e => e.kind === 'new_product' && !hidden.has(e.id)
+    && when(e.created_at) >= cutoff && itemsOf(e).length);
+  const found = drops.reduce((sum, e) => sum + itemsOf(e).length, 0);
+
+  const n = act.length + found;
   $('headline').textContent = !WATCHES.length ? 'Nothing watched yet'
     : n === 0 ? 'Nothing to act on' : n + ' thing' + (n === 1 ? '' : 's') + ' to act on';
   $('eyebrow').textContent = 'Your list · ' + new Date().toLocaleDateString(undefined,
     {weekday: 'long', day: 'numeric', month: 'long'});
   $('counts').innerHTML =
     `<span style="color:var(--in-stock)">${act.length} buyable</span>
+     ${found ? `<span style="color:var(--in-stock)">${found} just dropped</span>` : ''}
      <span>${held.length} held</span>
      <span style="color:var(--failing)">${broken.length} broken</span>
      <button class="btn-ghost" onclick="openAdd()">Add a watch</button>`;
 
-  let html = act.map(actRow).join('') + held.map(heldRow).join('') + broken.map(brokenRow).join('');
+  let html = drops.map(dropCard).join('')
+    + act.map(actRow).join('') + held.map(heldRow).join('') + broken.map(brokenRow).join('');
   if (waiting.length) {
     html += `<div class="group-label">Waiting · ${waiting.length} · nothing to do</div>
       <div>${waiting.map(waitRow).join('')}</div>`;
+  }
+  if (EVENTS.length) {
+    html += `<div class="group-label">Recent alerts · ${EVENTS.length}</div>
+      <div>${EVENTS.slice(0, 25).map(feedRow).join('')}</div>`;
   }
   if (!WATCHES.length) {
     html = `<div class="empty">Nothing watched yet. Add one — a product URL for a
@@ -461,9 +604,13 @@ function render() {
 
 async function refresh() {
   try {
-    WATCHES = (await api('/watches')).watches;
+    /* The alert feed is not optional decoration — it is the only place a fired
+       drop lives, since the watch itself goes straight back to watching. */
+    const [w, e] = await Promise.all([api('/watches'), api('/events?limit=50')]);
+    WATCHES = w.watches;
+    EVENTS = e.events || [];
     render();
-  } catch (e) { /* 401 already handled */ }
+  } catch (err) { /* 401 already handled */ }
 }
 
 async function alsoAlert(id, size) {
