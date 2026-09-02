@@ -5,3 +5,13 @@ httpx[http2]>=0.27
 apscheduler>=3.10,<4
 itsdangerous>=2.2
 pydantic>=2.0
+
+# The test runner is a PRODUCTION dependency of this deployment, not a dev
+# convenience: autodeploy.sh runs the suite on the server and refuses to restart
+# anything that fails it. Keeping these in a separate "dev" file was the lie
+# that took the deploy gate down — the box had no pytest, so "cannot run tests"
+# was reported as "tests failed". They are small, pure-Python, and every test
+# monkeypatches DB_PATH to a temp file, so the suite never touches live data.
+pytest>=8.0
+pytest-asyncio>=0.23
+respx>=0.21

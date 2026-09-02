@@ -114,6 +114,8 @@ if grep -q '^monitor/requirements.txt$' <<<"$CHANGED"; then
   if ! "$VENV/bin/pip" install -q -r monitor/requirements.txt; then
     log "pip install failed"
     rollback "$PREV" "$DEPS"
+    # Same rule as every other failure: say it once, not every five minutes.
+    echo "$NEXT" > "$FAILED_MARK"
     notify "⚠️ <b>Auto-deploy failed</b>
 <code>pip install</code> failed for <code>${NEXT:0:7}</code>.
 Still running <code>${PREV:0:7}</code>."

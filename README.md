@@ -169,9 +169,14 @@ one defeats it. Therefore:
   per commit. A failure resets the tree, so the next tick would otherwise see
   the same commit as new and re-alert every five minutes forever.
 - "Cannot run the tests" and "the tests failed" are reported as different
-  things, because one means fix the code and the other means fix the box. The
-  venv is built from `requirements.txt`, which has no test runner in it, so the
-  gate installs `requirements-dev.txt` when pytest is missing.
+  things, because one means fix the code and the other means fix the box.
+
+The test runner lives in `requirements.txt`, not in a dev-only file. That is
+deliberate: the gate runs the suite **on the server**, so pytest is a production
+dependency of this deployment, and pretending otherwise is what took the gate
+down once already — the box had no pytest, so "cannot run tests" was reported as
+"tests failed". Every test monkeypatches `DB_PATH` to a temp file, so running
+the suite on the box never touches live data.
 
 ```
 systemctl list-timers restock-autodeploy     # when it next runs

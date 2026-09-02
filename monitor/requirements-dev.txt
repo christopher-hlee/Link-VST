@@ -1,4 +1,4 @@
+# Everything needed to run the tests now lives in requirements.txt, because the
+# deploy gate runs them on the server. Kept so `pip install -r
+# requirements-dev.txt` still works in older runbooks and scripts.
 -r requirements.txt
-pytest>=8.0
-pytest-asyncio>=0.23
-respx>=0.21

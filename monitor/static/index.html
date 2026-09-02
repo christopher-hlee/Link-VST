@@ -179,10 +179,10 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   .wait{grid-template-columns:minmax(0,1fr) auto auto;gap:8px 10px}
   .wait .n{overflow-wrap:anywhere}
   .wait .p,.wait .t{display:none}
-  .fired{grid-template-columns:1fr 84px 34px;gap:8px 10px}
+  .fired{grid-template-columns:1fr 84px 44px;gap:8px 10px}
   .fired .fp{display:none}
   .fired .ft{grid-column:1;font-size:10px}
-  .feed{grid-template-columns:auto 1fr 26px;gap:4px 12px}
+  .feed{grid-template-columns:auto 1fr 44px;gap:4px 12px}
   /* Ellipsis on a 430px column leaves "www.ninte…", which names nothing.
      Wrapping costs a line and keeps the row readable. */
   .feed .fw{grid-column:1/-1;white-space:normal;overflow:visible}
@@ -497,8 +497,12 @@ async function dismissAll(ids) {
   render();
 }
 
+/* Clears EVERY event, including the ones listed above as actionable — so the
+   count in the prompt has to be the total, not the length of the section the
+   button happens to sit in. */
 async function clearFeed() {
-  if (!confirm(`Clear all ${EVENTS.length} alerts? The watches keep running.`)) return;
+  if (!confirm(`Clear all ${EVENTS.length} alerts, including anything listed `
+             + `above? The watches keep running.`)) return;
   try { await api('/events', {method: 'DELETE'}); }
   catch (e) { toast(e.message, 'bad'); return; }
   EVENTS = [];
