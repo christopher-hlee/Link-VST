@@ -165,7 +165,13 @@ one defeats it. Therefore:
 - The restart doesn't come up healthy? Roll back and restart again — including
   reinstalling the previous dependencies, since new packages may be the very
   thing that broke it.
-- Telegram only on a real deploy, a block, or a rollback.
+- Telegram only on a real deploy, a block, or a rollback — and only **once**
+  per commit. A failure resets the tree, so the next tick would otherwise see
+  the same commit as new and re-alert every five minutes forever.
+- "Cannot run the tests" and "the tests failed" are reported as different
+  things, because one means fix the code and the other means fix the box. The
+  venv is built from `requirements.txt`, which has no test runner in it, so the
+  gate installs `requirements-dev.txt` when pytest is missing.
 
 ```
 systemctl list-timers restock-autodeploy     # when it next runs

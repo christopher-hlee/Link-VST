@@ -27,6 +27,12 @@ fi
 echo "--> Installing Python dependencies"
 "$VENV/bin/pip" install -q --upgrade pip
 "$VENV/bin/pip" install -q -r monitor/requirements.txt
+# The auto-deploy gate runs the test suite on this machine before it restarts
+# anything, so the test runner is not optional here — a venv without it makes
+# the gate report "tests failed" when it means "cannot run tests".
+if [ -f monitor/requirements-dev.txt ]; then
+  "$VENV/bin/pip" install -q -r monitor/requirements-dev.txt
+fi
 
 if [ ! -f monitor/.env ]; then
   cp monitor/.env.example monitor/.env
