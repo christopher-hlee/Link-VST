@@ -1,0 +1,16 @@
+[Unit]
+Description=Restock Monitor auto-deploy (pull, test, restart)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=platform
+WorkingDirectory=/home/platform/restock-monitor
+# flock so a slow test run can never have the next tick reset the repo out from
+# under it. -n: if a run is already in progress, this tick just exits.
+ExecStart=/usr/bin/flock -n /tmp/restock-autodeploy.lock /home/platform/restock-monitor/autodeploy.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

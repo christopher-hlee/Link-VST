@@ -133,6 +133,40 @@ through a different path from Telegram, so one outage can't silence both.
 
 Verify delivery from the dashboard's **Test Telegram** button before trusting it.
 
+## Auto-deploy
+
+Run once on the server, as `platform`:
+
+```bash
+cd ~/restock-monitor && ./bootstrap-autodeploy.sh
+```
+
+A systemd timer then checks the tracked branch every five minutes and deploys
+new commits on its own, so shipping a change is just a push.
+
+`autodeploy.sh` is not `deploy-monitor.sh`. That one is the installer — it
+apt-installs Caddy and finishes by probing live Shopify, which is right once and
+far too heavy every five minutes. The updater is the narrow path, and it is
+built around a single idea: **an auto-deploy that can ship broken code to a
+monitor is worse than no auto-deploy.** The reason this app exists is to catch a
+drop you'd otherwise miss, so quietly swapping a working monitor for a broken
+one defeats it. Therefore:
+
+- Nothing new? Exit silently. A chatty timer is a timer you learn to ignore.
+- Tests run **before** anything restarts. They fail, the tree reverts and the
+  running service is never touched.
+- The restart doesn't come up healthy? Roll back and restart again — including
+  reinstalling the previous dependencies, since new packages may be the very
+  thing that broke it.
+- Telegram only on a real deploy, a block, or a rollback.
+
+```
+systemctl list-timers restock-autodeploy     # when it next runs
+journalctl -u restock-autodeploy -f          # what it did
+sudo systemctl start restock-autodeploy      # deploy now
+sudo systemctl disable --now restock-autodeploy.timer   # turn it off
+```
+
 ## API
 
 | Method | Path | |

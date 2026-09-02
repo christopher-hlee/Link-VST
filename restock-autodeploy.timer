@@ -1,0 +1,13 @@
+[Unit]
+Description=Check for new restock-monitor commits every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+# Catch up after a reboot or a suspended VPS rather than waiting for the next
+# window — a missed deploy should not sit undeployed for hours.
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
