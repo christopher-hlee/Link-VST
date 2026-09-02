@@ -29,6 +29,11 @@ STATIC = Path(__file__).parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    # Idempotent, so it costs one indexed query per boot and repairs any watch
+    # created before creation derived a readable name.
+    renamed = db.backfill_watch_names()
+    if renamed:
+        log.info("renamed %d watch(es) that were showing a raw URL", renamed)
     scheduler.start()
     try:
         yield

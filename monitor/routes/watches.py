@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import db, scheduler, strategies
-from ..config import INTERVAL_BASE, INTERVAL_HOT, INTERVAL_SLOW
+from ..config import (BESTBUY_API_KEY, INTERVAL_BASE, INTERVAL_HOT,
+                      INTERVAL_SLOW)
 from ..statemachine import UNKNOWN
 from ..timeutil import EPOCH, stamp_in
 
@@ -105,6 +106,16 @@ async def create_watch(body: WatchCreate):
             )
         for key in ("strategy", "kind", "name", "brand", "target_ref"):
             fields.setdefault(key, detected.get(key))
+
+    # A missing key is not a transient failure, so let it fail here rather than
+    # five checks later when the watch auto-pauses and looks broken instead of
+    # unconfigured.
+    if fields.get("strategy") == "bestbuy" and not BESTBUY_API_KEY:
+        raise HTTPException(
+            422,
+            "Best Buy needs a free API key. Get one at https://developer.bestbuy.com, "
+            "add BESTBUY_API_KEY to monitor/.env, and restart the service.",
+        )
 
     fields.setdefault("kind", "product")
     # Pinning `strategy` skips detection, which is where a name normally comes

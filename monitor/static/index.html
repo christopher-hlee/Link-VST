@@ -77,7 +77,7 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 
 .group-label{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--dim);
   padding:26px 0 14px}
-.wait{display:grid;grid-template-columns:1fr 130px 108px 132px;gap:20px;align-items:center;
+.wait{display:grid;grid-template-columns:1fr 130px 92px 96px auto;gap:16px;align-items:center;
   padding:12px 0;border-top:1px solid var(--rule-faint)}
 .wait:last-child{border-bottom:1px solid var(--rule-faint)}
 .wait .n{font-size:14px;color:var(--text-dim)}
@@ -86,27 +86,35 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .wait .s{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:7px}
 .wait .p{font-family:var(--serif);font-size:15px;color:var(--muted)}
 .wait .t{font-size:12px;color:var(--faint);text-align:right}
+.wait .wa{display:inline-flex;align-items:center;gap:10px;justify-self:end}
 
 @keyframes armpulse{0%,100%{opacity:1}50%{opacity:.3}}
 .pulse{animation:armpulse 1.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.pulse{animation:none}}
 
-/* A drop is a LIST — one link per item — where a restock is one transition.
-   The card exists so the dashboard says the same thing the alert did. */
-.drop{border:1px solid #3a3a2c;margin:22px 0 0}
-.drop-h{display:flex;align-items:center;gap:14px;padding:14px 18px;background:#191712;
-  border-bottom:1px solid #3a3a2c;flex-wrap:wrap}
-.drop-h .ttl{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--bright)}
-.drop-h .when{margin-left:auto;font-size:11px;color:var(--muted)}
-.drop-b{padding:4px 18px 14px}
-.drop-b .why{font-size:12px;color:var(--held);padding:12px 0 4px}
-.item{display:grid;grid-template-columns:1fr 92px 108px;gap:16px;align-items:center;
-  padding:13px 0;border-top:1px solid var(--rule-faint)}
-.item .in{font-family:var(--serif);font-size:16px;color:var(--bright);line-height:1.25}
-.item .ip{font-family:var(--serif);font-size:15px;color:var(--muted)}
-.item .chip{padding:9px 0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
-  font-family:var(--sans);min-height:38px}
-.feed{display:grid;grid-template-columns:96px 150px 1fr;gap:18px;align-items:baseline;
+/* A fired drop is one compact row per item, each dismissable on its own.
+   Cards were tried first and did not survive contact with reality: a store
+   lists one product at a time, so every card held a single row and twenty
+   drops filled the screen. */
+.fired{display:grid;grid-template-columns:1fr 84px 74px 92px 34px;gap:14px;
+  align-items:center;padding:12px 0;border-top:1px solid var(--rule-faint)}
+.fired:last-child{border-bottom:1px solid var(--rule-faint)}
+.fired .fi{font-family:var(--serif);font-size:16px;color:var(--bright);line-height:1.3;
+  min-width:0;overflow-wrap:anywhere}
+.fired .fi a{color:var(--bright);text-decoration:none}
+.fired .fi a:hover{color:var(--accent)}
+.fired .fi .k{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+.fired .fp{font-family:var(--serif);font-size:15px;color:var(--muted)}
+.fired .ft{font-size:11px;color:var(--faint)}
+.chip.mini{flex:none;width:100%;padding:8px 0;font-family:var(--sans);font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;min-height:34px}
+/* The dismiss control. Dim until hovered so twenty of them do not read as
+   twenty warnings, but always present rather than hidden behind a hover. */
+.x{background:none;border:1px solid transparent;color:var(--dim);font-size:19px;
+  line-height:1;width:34px;height:34px;transition:color .1s,border-color .1s}
+.x:hover{color:var(--failing);border-color:var(--failing)}
+.feed{display:grid;grid-template-columns:96px 150px 1fr 26px;gap:18px;align-items:baseline;
   padding:11px 0;border-top:1px solid var(--rule-faint)}
 .feed .fw{font-size:12px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap}
@@ -168,16 +176,17 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   .name{font-size:24px}
   .actions{justify-content:flex-start}
   .caption{text-align:left}
-  .wait{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .wait{grid-template-columns:minmax(0,1fr) auto auto;gap:8px 10px}
   .wait .n{overflow-wrap:anywhere}
   .wait .p,.wait .t{display:none}
-  .item{grid-template-columns:1fr 96px;gap:10px}
-  .item .ip{display:none}
-  .feed{grid-template-columns:auto 1fr;gap:4px 12px}
+  .fired{grid-template-columns:1fr 84px 34px;gap:8px 10px}
+  .fired .fp{display:none}
+  .fired .ft{grid-column:1;font-size:10px}
+  .feed{grid-template-columns:auto 1fr 26px;gap:4px 12px}
   /* Ellipsis on a 430px column leaves "www.ninte…", which names nothing.
      Wrapping costs a line and keeps the row readable. */
   .feed .fw{grid-column:1/-1;white-space:normal;overflow:visible}
-  .drop-h,.drop-b{padding-left:14px;padding-right:14px}
+  .feed .x{grid-row:1;grid-column:3}
   /* Long brand + title cannot shrink in an `auto` track, so the status span
      pushed the whole page sideways. */
   .wait .s{justify-self:end;text-align:right}
@@ -185,6 +194,9 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   .intent{grid-template-columns:22px 1fr;gap:12px}
   .intent .ex{display:none}
   .btn-text,.chip{min-height:44px}
+  /* A destructive control needs a real tap target, and the inline style that
+     sizes it on desktop has to be overridden explicitly to get one. */
+  .x{width:44px!important;height:44px!important;font-size:22px!important}
 }
 </style>
 </head>
@@ -274,6 +286,15 @@ const backoffBadge = () =>
   `<span class="state-eyebrow" style="color:var(--armed);letter-spacing:.18em"` +
   ` title="The store asked for fewer requests. Polling has slowed; nothing is broken.">` +
   `${GLYPH.paused}Backing off</span>`;
+/* Detection names a collection watch "host · handle" and separately sets
+   brand=host, so rendering both prints the host twice. Show only the part the
+   kicker does not already say. */
+function shortName(w) {
+  const name = w.last_title || w.name || '';
+  const brand = (w.brand || '').trim();
+  if (!brand || !name.toLowerCase().startsWith(brand.toLowerCase())) return name;
+  return name.slice(brand.length).replace(/^\s*·\s*/, '') || name;
+}
 const realSizes = w => (w.available_sizes || []).filter(s => s && !/^default/i.test(s));
 
 function ago(ts) {
@@ -443,28 +464,57 @@ function waitRow(w) {
   const size = w.size_pref
     ? `<span style="color:var(--dim);font-size:12px"> · size ${esc(w.size_pref.toUpperCase())}</span>` : '';
   return `<div class="wait">
-    <span class="n"><span class="k">${esc(w.brand || '')}</span>${esc(w.last_title || w.name)}${size}</span>
+    <span class="n"><span class="k">${esc(w.brand || '')}</span>${esc(shortName(w))}${size}</span>
     ${status}
     <span class="p">${w.last_price != null ? money(w.last_price) : '—'}</span>
-    <span class="t">${esc(ago(w.last_checked_at))} · ${esc(every(w))}
-      <button class="btn-text" style="color:var(--dim);margin-left:12px"
-        onclick="edit(${w.id})">Edit</button></span>
+    <span class="t">${esc(ago(w.last_checked_at))} · ${esc(every(w))}</span>
+    <span class="wa">
+      <button class="btn-text" style="color:var(--dim)" onclick="edit(${w.id})">Edit</button>
+      <button class="x" style="width:26px;height:26px;font-size:16px;vertical-align:middle"
+        title="Delete this watch" aria-label="Delete ${esc(w.name)}"
+        onclick="removeWatch(${w.id})">&times;</button>
+    </span>
   </div>`;
 }
 
 /* ---------- drops ---------- */
 
 const DROP_WINDOW_MS = 48 * 3600 * 1000;
-const SEEN_KEY = 'restock.seen';
-const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY)) || []; }
-                     catch (e) { return []; } };
-function markSeen(id) {
-  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen(), id].slice(-200))); }
-  catch (e) {}
+
+/* Dismissal deletes the event, rather than flagging it in localStorage.
+   This dashboard gets read on a phone and on a laptop, and an alert cleared on
+   one has to be gone on the other — a per-browser flag quietly fails that. */
+async function dismiss(id) {
+  try { await api('/events/' + id, {method: 'DELETE'}); }
+  catch (e) { toast(e.message, 'bad'); return; }
+  EVENTS = EVENTS.filter(x => x.id !== id);
   render();
 }
+
+async function dismissAll(ids) {
+  await Promise.all(ids.map(id => api('/events/' + id, {method: 'DELETE'}).catch(() => {})));
+  EVENTS = EVENTS.filter(x => !ids.includes(x.id));
+  render();
+}
+
+async function clearFeed() {
+  if (!confirm(`Clear all ${EVENTS.length} alerts? The watches keep running.`)) return;
+  try { await api('/events', {method: 'DELETE'}); }
+  catch (e) { toast(e.message, 'bad'); return; }
+  EVENTS = [];
+  render();
+  toast('Alert history cleared.', 'good');
+}
+
 const when = ts => new Date(String(ts).replace(' ', 'T') + 'Z');
 const evName = e => e.watch_brand || e.watch_name || 'a watch';
+
+/* Whether an event is news or merchandise is a property of the WATCH, not of
+   the stored payload. Trusting the payload flag alone mislabels every event
+   written before that flag existed — which is how articles ended up announcing
+   themselves as "not in the 23-product catalogue". */
+const isAnnounce = e =>
+  e.watch_strategy === 'announce' || !!(e.payload || {}).is_announcement;
 
 /* Events stored before per-item links existed still know their handle, and the
    handle is all a Shopify product URL needs — so old drops become clickable
@@ -476,51 +526,37 @@ function itemsOf(e) {
   return (p.handles || []).map(h => {
     const it = (p.items || {})[h] || {};
     const url = it.url || (p.links || {})[h] ||
-                (base && !p.is_announcement ? base + '/products/' + h : '');
+                (base && !isAnnounce(e) ? base + '/products/' + h : '');
     const carts = (it.offers || []).filter(o => o.cart_url);
     return {handle: h, title: it.title || (p.titles || {})[h] || h,
             price: it.price, url, cart: carts.length === 1 ? carts[0].cart_url : ''};
   });
 }
 
-function dropCard(e) {
-  const items = itemsOf(e);
-  if (!items.length) return '';
-  const n = items.length;
-  const announce = (e.payload || {}).is_announcement;
-  const before = (e.payload || {}).baseline_count;
-  const why = announce
-    ? 'Matched your keywords in the feed.'
-    : before != null
-    ? `Not in the ${before}-product catalogue ${ago(e.created_at)}.`
-    : 'Not in the catalogue on the previous sweep.';
+/* A drop is one row, not a card.
 
-  const rows = items.map(it => {
-    const chip = it.cart
-      ? `<button class="chip primary" onclick="window.open('${esc(it.cart)}','_blank','noopener')">Cart</button>`
-      : it.url
-      ? `<button class="chip" onclick="window.open('${esc(it.url)}','_blank','noopener')">${announce ? 'Read' : 'Open'}</button>`
-      : '<span class="caption">no link</span>';
-    return `<div class="item">
-      <span class="in">${esc(it.title)}</span>
-      <span class="ip">${it.price != null ? money(it.price) : ''}</span>
-      ${chip}
-    </div>`;
-  }).join('');
-
-  return `<div class="drop">
-    <div class="drop-h">
-      <span style="color:var(--in-stock);display:inline-flex">${GLYPH.watching}</span>
-      <span class="ttl">${n} ${announce ? (n === 1 ? 'match' : 'matches')
-                                        : 'new'} · ${esc(evName(e))}</span>
-      <span class="when">${esc(ago(e.created_at))}
-        <button class="btn-text" style="color:var(--dim);margin-left:14px"
-          onclick="markSeen(${e.id})">Seen</button></span>
-    </div>
-    <div class="drop-b">
-      <div class="why">${esc(why)}</div>
-      ${rows}
-    </div>
+   The card was built to hold several items at once — "3 new · Satisfy" — but a
+   store lists one product at a time, so twenty drops became twenty full-height
+   cards and the list turned into the clutter it was meant to surface. One row
+   per item, each independently dismissable, says the same thing in a tenth of
+   the space. */
+function dropRow(it, e, announce) {
+  const act = it.cart
+    ? `<button class="chip primary mini" onclick="window.open('${esc(it.cart)}','_blank','noopener')">Cart</button>`
+    : it.url
+    ? `<button class="chip mini" onclick="window.open('${esc(it.url)}','_blank','noopener')">${announce ? 'Read' : 'Open'}</button>`
+    : '<span class="caption">no link</span>';
+  return `<div class="fired">
+    <span class="fi">
+      <span class="k">${esc(evName(e))}</span>
+      ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>`
+               : esc(it.title)}
+    </span>
+    <span class="fp">${it.price != null ? money(it.price) : ''}</span>
+    <span class="ft">${esc(ago(e.created_at))}</span>
+    ${act}
+    <button class="x" title="Dismiss" aria-label="Dismiss ${esc(it.title)}"
+      onclick="dismiss(${e.id})">&times;</button>
   </div>`;
 }
 
@@ -545,6 +581,8 @@ function feedRow(e) {
     <span class="t" style="text-align:left">${esc(ago(e.created_at))}</span>
     <span class="fs" style="color:${ink}">${esc(label)}</span>
     <span class="fw">${href ? `<a href="${esc(href)}" target="_blank" rel="noopener">` : ''}${esc(evName(e))}${note ? ' · ' + esc(note) : ''}${href ? '</a>' : ''}</span>
+    <button class="x" style="width:26px;height:26px;font-size:16px"
+      title="Delete this alert" aria-label="Delete alert" onclick="dismiss(${e.id})">&times;</button>
   </div>`;
 }
 
@@ -564,34 +602,61 @@ function render() {
   broken.sort((a, b) => (b.consecutive_failures || 0) - (a.consecutive_failures || 0));
 
   /* A drop has no lasting stock state — the collection just carries on
-     watching — so without this the two things it found would be invisible. */
-  const hidden = new Set(seen());
+     watching — so without this what it found would be invisible. */
   const cutoff = Date.now() - DROP_WINDOW_MS;
-  const drops = EVENTS.filter(e => e.kind === 'new_product' && !hidden.has(e.id)
+  const fired = EVENTS.filter(e => e.kind === 'new_product'
     && when(e.created_at) >= cutoff && itemsOf(e).length);
-  const found = drops.reduce((sum, e) => sum + itemsOf(e).length, 0);
 
-  const n = act.length + found;
+  /* News and merchandise are not the same news. A feed match is something to
+     read; a drop is something to buy, and letting articles inflate "things to
+     act on" is how the number stops meaning anything. */
+  const buy = [], news = [];
+  for (const e of fired) {
+    const a = isAnnounce(e);
+    for (const it of itemsOf(e)) (a ? news : buy).push({it, e, a});
+  }
+
+  const n = act.length + buy.length;
   $('headline').textContent = !WATCHES.length ? 'Nothing watched yet'
     : n === 0 ? 'Nothing to act on' : n + ' thing' + (n === 1 ? '' : 's') + ' to act on';
   $('eyebrow').textContent = 'Your list · ' + new Date().toLocaleDateString(undefined,
     {weekday: 'long', day: 'numeric', month: 'long'});
   $('counts').innerHTML =
     `<span style="color:var(--in-stock)">${act.length} buyable</span>
-     ${found ? `<span style="color:var(--in-stock)">${found} just dropped</span>` : ''}
+     ${buy.length ? `<span style="color:var(--in-stock)">${buy.length} just dropped</span>` : ''}
+     ${news.length ? `<span>${news.length} to read</span>` : ''}
      <span>${held.length} held</span>
      <span style="color:var(--failing)">${broken.length} broken</span>
      <button class="btn-ghost" onclick="openAdd()">Add a watch</button>`;
 
-  let html = drops.map(dropCard).join('')
-    + act.map(actRow).join('') + held.map(heldRow).join('') + broken.map(brokenRow).join('');
+  const clearBtn = ids => `<button class="btn-text" style="color:var(--dim);margin-left:14px"
+      onclick="dismissAll([${ids}])">Clear</button>`;
+
+  let html = act.map(actRow).join('') + held.map(heldRow).join('') + broken.map(brokenRow).join('');
+
+  if (buy.length) {
+    const ids = [...new Set(buy.map(r => r.e.id))];
+    html = `<div class="group-label">Just dropped · ${buy.length}${clearBtn(ids)}</div>
+      <div>${buy.map(r => dropRow(r.it, r.e, false)).join('')}</div>` + html;
+  }
+  if (news.length) {
+    const ids = [...new Set(news.map(r => r.e.id))];
+    html += `<div class="group-label">From your feeds · ${news.length}${clearBtn(ids)}</div>
+      <div>${news.map(r => dropRow(r.it, r.e, true)).join('')}</div>`;
+  }
   if (waiting.length) {
     html += `<div class="group-label">Waiting · ${waiting.length} · nothing to do</div>
       <div>${waiting.map(waitRow).join('')}</div>`;
   }
-  if (EVENTS.length) {
-    html += `<div class="group-label">Recent alerts · ${EVENTS.length}</div>
-      <div>${EVENTS.slice(0, 25).map(feedRow).join('')}</div>`;
+  /* Anything already listed above as actionable is not repeated here. Showing
+     each event twice is precisely the clutter this section was accused of. */
+  const shown = new Set(fired.map(e => e.id));
+  const history = EVENTS.filter(e => !shown.has(e.id));
+  if (history.length) {
+    html += `<div class="group-label">Recent alerts · ${history.length}
+      <button class="btn-text" style="color:var(--dim);margin-left:14px"
+        onclick="clearFeed()">Clear all</button></div>
+      <div>${history.slice(0, 25).map(feedRow).join('')}</div>`;
   }
   if (!WATCHES.length) {
     html = `<div class="empty">Nothing watched yet. Add one — a product URL for a
@@ -663,7 +728,7 @@ async function detail(id) {
 
 async function edit(id) {
   const w = (await api('/watches/' + id)).watch;
-  const isAnnounce = w.strategy === 'announce';
+  const feedWatch = w.strategy === 'announce';
   const tier = w.base_interval_s <= 45 ? 'fast' : w.base_interval_s >= 900 ? 'slow' : 'base';
 
   $('add').innerHTML = `<div class="sheet">
@@ -680,7 +745,7 @@ async function edit(id) {
       <input type="url" id="eUrl" value="${esc(w.url)}">
     </div>
 
-    ${isAnnounce ? `<div class="field">
+    ${feedWatch ? `<div class="field">
       <label>Keywords <span style="color:var(--dim)">a, b = either · a + b = both</span></label>
       <input type="text" id="eKw" value="${esc(w.target_ref || '')}">
       <div class="warn">On a busy feed, prefer <b>+</b>. One broad term matches
@@ -721,14 +786,14 @@ async function edit(id) {
   const original = {url: w.url, kw: w.target_ref || ''};
   const flag = () => {
     const changed = $('eUrl').value.trim() !== original.url
-      || (isAnnounce && $('eKw').value.trim() !== original.kw);
+      || (feedWatch && $('eKw').value.trim() !== original.kw);
     $('eWarn').innerHTML = changed
       ? `<div class="warn">This changes what the watch is looking at, so it
          starts over: the baseline is cleared and the next check re-reads from
          scratch. You won't be alerted about anything already there.</div>` : '';
   };
   $('eUrl').addEventListener('input', flag);
-  if (isAnnounce) $('eKw').addEventListener('input', flag);
+  if (feedWatch) $('eKw').addEventListener('input', flag);
   [...$('eSeg').children].forEach(b => b.onclick = () =>
     [...$('eSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b)));
 }

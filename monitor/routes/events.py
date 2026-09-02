@@ -12,6 +12,23 @@ def list_events(limit: int = Query(default=100, ge=1, le=500)):
     return {"events": db.list_events(limit=limit)}
 
 
+@router.delete("/events/{event_id}")
+def delete_event(event_id: int):
+    """Dismiss one alert for good.
+
+    Server-side rather than a browser flag: the dashboard gets read on a phone
+    and on a laptop, and an alert cleared on one should be gone on the other.
+    """
+    if not db.delete_event(event_id):
+        raise HTTPException(404, "No such event")
+    return {"ok": True}
+
+
+@router.delete("/events")
+def clear_events():
+    return {"ok": True, "deleted": db.clear_events()}
+
+
 @router.post("/test-alert")
 async def test_alert():
     """Prove the Telegram path works before relying on it."""

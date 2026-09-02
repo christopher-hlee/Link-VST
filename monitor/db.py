@@ -10,6 +10,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from typing import Any, Iterator
+from urllib.parse import urlparse
 
 from .config import DB_PATH, CHECK_HISTORY_LIMIT
 from .timeutil import EPOCH
@@ -250,7 +251,8 @@ def list_events(limit: int = 100) -> list[dict]:
             # watch_url lets the dashboard rebuild a product link for events
             # stored before per-item links were captured.
             """SELECT e.*, w.name AS watch_name, w.brand AS watch_brand,
-                      w.url AS watch_url, w.kind AS watch_kind
+                      w.url AS watch_url, w.kind AS watch_kind,
+                      w.strategy AS watch_strategy
                FROM events e LEFT JOIN watches w ON w.id = e.watch_id
                ORDER BY e.id DESC LIMIT ?""",
             (limit,),
@@ -264,6 +266,45 @@ def list_events(limit: int = 100) -> list[dict]:
                 d["payload"] = {}
             out.append(d)
         return out
+
+
+def delete_event(event_id: int) -> bool:
+    with tx() as conn:
+        cur = conn.execute("DELETE FROM events WHERE id=?", (event_id,))
+        return cur.rowcount > 0
+
+
+def clear_events() -> int:
+    """Drop the whole alert history. Returns how many rows went."""
+    with tx() as conn:
+        cur = conn.execute("DELETE FROM events")
+        return cur.rowcount
+
+
+def backfill_watch_names() -> int:
+    """Give a URL-named watch a readable name.
+
+    Naming a strategy explicitly skips detection, which is where a name normally
+    comes from, so those watches fell back to their raw URL. Creation now derives
+    one, but rows created before that keep the URL — this fixes them in place.
+    Idempotent, so it is safe on every boot.
+    """
+    fixed = 0
+    with tx() as conn:
+        rows = conn.execute(
+            "SELECT id, name, url, target_ref, brand FROM watches "
+            "WHERE name LIKE 'http://%' OR name LIKE 'https://%'"
+        ).fetchall()
+        for row in rows:
+            host = urlparse(row["url"]).netloc.replace("www.", "")
+            if not host:
+                continue
+            ref = (row["target_ref"] or "").strip()
+            name = f"{host} \u00b7 {ref}" if ref else host
+            conn.execute("UPDATE watches SET name=?, brand=COALESCE(NULLIF(brand,''),?) "
+                         "WHERE id=?", (name, host, row["id"]))
+            fixed += 1
+    return fixed
 
 
 def summary() -> dict:

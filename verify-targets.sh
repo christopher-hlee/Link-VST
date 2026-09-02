@@ -121,6 +121,54 @@ case "$CODE" in
 esac
 row "target" "redsky pdp_fulfillment_v1" "$CODE" "$V"
 
+# A 410 means the endpoint was RETIRED, not that this IP is blocked, so no
+# amount of proxying fixes it — the strategy needs pointing at whatever
+# replaced it. These are the candidates; this prints which one answers so the
+# rewrite is done against a measured shape rather than a guess.
+if [ "$CODE" = "410" ] || [ "$CODE" = "404" ]; then
+  echo
+  echo "  ${ylw}pdp_fulfillment_v1 is gone. Probing replacements${rst}"
+  # A real, long-lived TCIN so a 404 means "no such endpoint", not "no such item".
+  PROBE_TCIN="${PROBE_TCIN:-87991564}"
+  FOUND=""
+  for EP in pdp_client_v1 product_fulfillment_v1 pdp_fulfillment_experience_v1 \
+            product_summary_with_fulfillment_v1 pdp_variation_hierarchy_v1; do
+    C=$(probe "https://redsky.target.com/redsky_aggregations/v1/web/$EP?key=$TARGET_KEY&tcin=$PROBE_TCIN&channel=WEB&page=%2Fp%2FA-$PROBE_TCIN")
+    if [ "$C" = "200" ]; then
+      echo "    ${grn}✓${rst} $(printf '%-38s' "$EP") $C"
+      [ -z "$FOUND" ] && FOUND="$EP"
+      # The shape matters as much as the status: print the key paths so the
+      # rewrite knows where availability actually lives.
+      python3 - "$BODY_FILE" <<'PYEOF' 2>/dev/null || true
+import json, sys
+def walk(o, p="", d=0):
+    if d > 4: return
+    if isinstance(o, dict):
+        for k, v in list(o.items())[:14]:
+            if isinstance(v, (dict, list)): walk(v, f"{p}.{k}", d + 1)
+            elif any(t in k.lower() for t in
+                     ("avail", "stock", "status", "quantity", "price", "title", "tcin")):
+                print(f"       {p}.{k} = {str(v)[:52]}")
+    elif isinstance(o, list) and o:
+        walk(o[0], f"{p}[0]", d + 1)
+try:
+    walk(json.load(open(sys.argv[1])))
+except Exception:
+    pass
+PYEOF
+    else
+      echo "    ${dim}·${rst} $(printf '%-38s' "$EP") $C"
+    fi
+  done
+  echo
+  if [ -n "$FOUND" ]; then
+    echo "  ${grn}Paste this section back${rst} — target.py gets rewritten against $FOUND."
+  else
+    echo "  ${ylw}Every candidate is dead too.${rst} The honest fix is to drop the"
+    echo "  ${dim}target strategy rather than ship one that always fails.${rst}"
+  fi
+fi
+
 # ---------------------------------------------------------------- Best Buy
 echo
 echo "${bold}Best Buy${rst}"

@@ -20,11 +20,18 @@ promoted. Sold-out sizes are absent rather than disabled — a greyed button
 invites a tap that cannot work. Single-variant products collapse to one
 "Add to cart".
 
-A drop that has fired gets its own card above the list, naming each new item
-with its price and a cart link, because the watch itself goes straight back to
-watching and would otherwise show nothing. Cards clear after 48 hours or when
-dismissed. Below everything, **Recent alerts** lists every alert sent, so the
-dashboard can be checked against Telegram instead of only agreeing with it.
+A fired drop shows as one compact row per item — brand, name, price, a cart or
+open link, and an `×` — grouped under **Just dropped**, because the watch itself
+goes straight back to watching and would otherwise show nothing. Feed matches
+land separately under **From your feeds**: an article is something to read, not
+something to buy, and letting articles inflate "things to act on" is how that
+number stops meaning anything.
+
+Every row dismisses individually, each group clears at once, and dismissing
+deletes the event server-side rather than setting a browser flag — this gets
+read on a phone and on a laptop, and an alert cleared on one has to be gone on
+the other. Anything still listed above is not repeated in **Recent alerts**,
+which holds the rest of the history.
 
 ## A drop is a list; a restock is one transition
 
