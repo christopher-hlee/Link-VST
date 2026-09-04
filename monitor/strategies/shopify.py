@@ -18,6 +18,11 @@ from ..statemachine import CheckResult, HELD, IN_STOCK, OUT_OF_STOCK
 
 NAME = "shopify"
 
+# Shopify caps products.json at 250 per page. Four pages covers a 1000-product
+# store, past which a drop watch is the wrong tool anyway.
+PAGE_SIZE = 250
+MAX_PAGES = 4
+
 _PRODUCT_RE = re.compile(r"/products/([^/?#]+)")
 _COLLECTION_RE = re.compile(r"/collections/([^/?#]+)")
 _ATOM_NS = {"a": "http://www.w3.org/2005/Atom"}
@@ -139,6 +144,10 @@ def _collection_item(base: str, product: dict) -> dict:
         "price": offers[0]["price"] if offers else None,
         "image": _image_url(images[0] if images else None),
         "offers": offers[:12],
+        # When the store actually listed it. This is the only way to tell our
+        # own polling lag apart from a stale CDN document — without it, "the
+        # alert was late" is an argument rather than a measurement.
+        "published_at": product.get("published_at") or product.get("created_at"),
     }
 
 
@@ -239,7 +248,7 @@ async def _check_collection(watch: dict) -> CheckResult:
     coll = watch.get("target_ref") or collection_handle(watch["url"])
     path = f"/collections/{coll}/products.json" if coll else "/products.json"
 
-    resp = await fetch(f"{base}{path}?limit=250",
+    resp = await fetch(f"{base}{path}?limit={PAGE_SIZE}",
                        etag=watch.get("etag"),
                        last_modified=watch.get("last_modified"))
     if resp.not_modified:
@@ -255,6 +264,27 @@ async def _check_collection(watch: dict) -> CheckResult:
 
     if resp.ok and isinstance(resp.json, dict):
         products = resp.json.get("products") or []
+
+        # A catalogue larger than one page was only ever seen through a moving
+        # 250-item window: the baseline grew past the page size by unioning
+        # successive sweeps, so a new product sorted outside the window was
+        # invisible until the ordering happened to shift. Page until the store
+        # returns a short page.
+        page = 1
+        while len(products) == page * PAGE_SIZE and page < MAX_PAGES:
+            page += 1
+            more = await fetch(f"{base}{path}?limit={PAGE_SIZE}&page={page}")
+            if more.rate_limited:
+                # Stop paging rather than push a host that just said slow down.
+                # A short read is still a usable sweep; the union keeps history.
+                break
+            if not (more.ok and isinstance(more.json, dict)):
+                break
+            batch = more.json.get("products") or []
+            if not batch:
+                break
+            products += batch
+
         handles = [p.get("handle") for p in products if p.get("handle")]
         items = {p["handle"]: _collection_item(base, p)
                  for p in products if p.get("handle")}

@@ -18,7 +18,8 @@ from .config import (
     MAX_CONCURRENT_CHECKS, TICK_SECONDS,
 )
 from .notify import heartbeat, ntfy, telegram
-from .statemachine import PRICE_DROP, WATCH_FAILING, decide, next_interval
+from .statemachine import (PRICE_DROP, WATCH_FAILING, adapt_interval, decide,
+                           next_interval)
 from .timeutil import is_future, parse, seconds_since, stamp, stamp_in, utcnow
 
 log = logging.getLogger("monitor.scheduler")
@@ -69,26 +70,43 @@ async def check_watch(watch: dict) -> bool:
         utcnow().timestamp(),
     )
 
+    # The controller learns `base_interval_s` — the watch's normal cadence.
+    # It must never learn from the armed interval: while armed, `interval` is
+    # the hot tier the person deliberately asked for, and writing that back
+    # would make a temporary arming permanent.
+    base = watch.get("base_interval_s") or 300
+    armed = is_future(watch.get("hot_until"))
+
     if result.rate_limited:
-        # Back off to at least double the normal interval, or whatever
-        # Retry-After asked for, whichever is longer. Capped so a watch cannot
-        # be deferred into effective silence by one bad afternoon.
-        wait = max(decision.defer_seconds or 0, interval * 2)
-        wait = min(wait, 3600)
+        # Ease off, but proportionately. Doubling the interval turned one 429
+        # into a ten-minute blind spot at the five-minute tier, which is how a
+        # drop got missed by sixteen minutes — the store asked us to slow down,
+        # not to stop. Retry-After wins when the store states its terms.
+        learned = adapt_interval(base, rate_limited=True,
+                                 retry_after=decision.defer_seconds)
+        wait = max(learned, interval) if armed else learned
         db.update_watch(watch["id"], last_checked_at=stamp(),
+                        base_interval_s=learned,
                         next_check_at=stamp_in(jittered(wait)),
-                        last_error=f"rate limited — backing off {int(wait)}s")
+                        last_error=f"rate limited — backing off to {int(wait)}s")
         db.record_check(watch["id"], ok=False, state=None, http_status=429,
                         latency_ms=None, error="HTTP 429 — rate limited")
-        log.warning("watch %s rate limited; next check in %ds", watch["id"], int(wait))
+        log.warning("watch %s rate limited; interval now %ds", watch["id"], int(wait))
         return result.ok
+
+    # A clean check earns a little speed back, so a watch that was slowed by a
+    # bad afternoon recovers on its own instead of staying slow forever.
+    learned = adapt_interval(base, rate_limited=False)
+    # While armed, keep polling at the armed cadence; only the learned base moves.
+    wait = interval if armed else learned
 
     updates = {
         "last_state": decision.state,
         "consecutive_failures": decision.failures,
         "last_price": decision.price,
         "last_checked_at": stamp(),
-        "next_check_at": stamp_in(jittered(interval)),
+        "base_interval_s": learned,
+        "next_check_at": stamp_in(jittered(wait)),
         "last_error": result.error,
     }
     if decision.baseline is not None:

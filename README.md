@@ -68,12 +68,33 @@ ban risk to save about two minutes on a restock that usually sits for hours.
 | base | 5 min    | default — restocks |
 | fast | 45 s     | only while armed for a known drop window |
 
-Three details do the real work:
+The tier is a starting point, not a setting: each watch **learns** its own
+cadence. Every clean check earns a little speed (−15s); a 429 gives it back
+multiplicatively, honouring `Retry-After` when the store sends one. Clamped to
+45s–15min. This is additive-increase/multiplicative-decrease, the shape TCP uses,
+and it exists because a fixed number is wrong for every store but one —
+hardcoding 45s got a watch rate-limited and auto-paused, while five minutes let a
+drop be missed by sixteen minutes.
+
+A 429 costs at most two extra minutes. It used to **double** the interval, which
+at the five-minute tier meant a ten-minute blind spot: the store asked us to slow
+down and we heard "stop".
+
+Three more details do the real work:
 
 - **Jitter** (±20%) — a perfectly periodic request pattern is a signature.
 - **ETag / If-None-Match** — most polls come back `304`, cheap and low-profile.
 - **Arming** — `POST /api/watches/{id}/arm` switches to the fast tier for a
-  set window, so you only spend aggression when a drop is actually expected.
+  set window. Arming never teaches the controller: a temporary cadence must not
+  become permanent.
+
+### Measuring the lag
+
+`products.json` carries `published_at`, so every drop alert reports how far
+behind the store it was — "listed 47s before this alert", amber past five
+minutes. Without it, "the alert was late" is an argument; with it, it is a
+reading that separates our polling lag from a stale CDN document. An unmeasurable
+lag prints nothing rather than zero.
 
 ## Strategies
 

@@ -107,6 +107,10 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   text-transform:uppercase;color:var(--dim);margin-bottom:3px}
 .fired .fp{font-family:var(--serif);font-size:15px;color:var(--muted)}
 .fired .ft{font-size:11px;color:var(--faint)}
+/* Detection lag. Amber past five minutes, because that is the point at which
+   the monitor stopped being the thing that told you first. */
+.fired .lag{display:block;margin-top:2px;color:var(--held)}
+.fired .lag.slow{color:var(--armed)}
 .chip.mini{flex:none;width:100%;padding:8px 0;font-family:var(--sans);font-size:11px;
   letter-spacing:.14em;text-transform:uppercase;min-height:34px}
 /* The dismiss control. Dim until hovered so twenty of them do not read as
@@ -544,6 +548,19 @@ function itemsOf(e) {
    cards and the list turned into the clutter it was meant to surface. One row
    per item, each independently dismissable, says the same thing in a tenth of
    the space. */
+/* How far behind the store we were when this fired. Shown only when the store
+   gave us a publish time — an unknown lag has to read as unknown, never as
+   zero, or the number stops being trustworthy exactly when it matters. */
+function lagNote(e) {
+  const s = (e.payload || {}).listed_ago_s;
+  if (typeof s !== 'number') return '';
+  const t = s < 90 ? s + 's' : s < 5400 ? Math.round(s / 60) + 'm'
+                                        : Math.round(s / 3600) + 'h';
+  const slow = s > 300;
+  return `<span class="lag${slow ? ' slow' : ''}" title="Listed by the store `
+       + `${t} before we detected it">· ${t} behind</span>`;
+}
+
 function dropRow(it, e, announce) {
   const act = it.cart
     ? `<button class="chip primary mini" onclick="window.open('${esc(it.cart)}','_blank','noopener')">Cart</button>`
@@ -557,7 +574,7 @@ function dropRow(it, e, announce) {
                : esc(it.title)}
     </span>
     <span class="fp">${it.price != null ? money(it.price) : ''}</span>
-    <span class="ft">${esc(ago(e.created_at))}</span>
+    <span class="ft">${esc(ago(e.created_at))}${lagNote(e)}</span>
     ${act}
     <button class="x" title="Dismiss" aria-label="Dismiss ${esc(it.title)}"
       onclick="dismiss(${e.id})">&times;</button>

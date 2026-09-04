@@ -211,3 +211,109 @@ def test_summary_counts():
     db.update_watch(make_watch(), last_state=IN_STOCK)
     s = db.summary()
     assert s["total"] == 2 and s["in_stock"] == 1 and s["enabled"] == 2
+
+
+# --- detection latency, end to end ------------------------------------------
+
+def _catalogue(handles, published=None):
+    return {"products": [
+        {"handle": h, "title": h.title(),
+         "published_at": published,
+         "variants": [{"id": 900 + i, "title": "M", "available": True,
+                       "price": "245.00"}]}
+        for i, h in enumerate(handles)]}
+
+
+@respx.mock
+async def test_a_drop_reports_how_far_behind_the_store_we_were(sent):
+    """The number that turns 'the alert was late' into a measurement."""
+    from datetime import datetime, timedelta, timezone
+
+    wid = db.create_watch(name="Satisfy", brand="Satisfy",
+                          url=f"{STORE}/collections/new", strategy="shopify",
+                          kind="collection", target_ref="new")
+    route = respx.get(url__startswith=f"{STORE}/collections/new/products.json")
+
+    route.mock(return_value=httpx.Response(200, json=_catalogue(["old"])))
+    await scheduler.check_watch(db.get_watch(wid))
+
+    listed = datetime.now(timezone.utc) - timedelta(minutes=4)
+    route.mock(return_value=httpx.Response(200, json=_catalogue(
+        ["old", "fresh"], published=listed.isoformat())))
+    await scheduler.check_watch(db.get_watch(wid))
+
+    lag = sent[0]["payload"]["listed_ago_s"]
+    assert 200 <= lag <= 320, "should read about four minutes behind"
+
+
+@respx.mock
+async def test_an_unknown_publish_time_makes_no_claim(sent):
+    """A missing timestamp must read as unknown, never as zero lag."""
+    wid = db.create_watch(name="Satisfy", brand="Satisfy",
+                          url=f"{STORE}/collections/new", strategy="shopify",
+                          kind="collection", target_ref="new")
+    route = respx.get(url__startswith=f"{STORE}/collections/new/products.json")
+
+    route.mock(return_value=httpx.Response(200, json=_catalogue(["old"])))
+    await scheduler.check_watch(db.get_watch(wid))
+    route.mock(return_value=httpx.Response(200, json=_catalogue(["old", "new1"])))
+    await scheduler.check_watch(db.get_watch(wid))
+
+    assert "listed_ago_s" not in sent[0]["payload"]
+
+
+@respx.mock
+async def test_a_rate_limit_no_longer_defers_the_next_poll_by_ten_minutes():
+    """The exact sequence that cost sixteen minutes: a 429 at the five-minute
+    tier used to push the next check out by another ten."""
+    from monitor.timeutil import parse, utcnow
+
+    wid = db.create_watch(name="Satisfy", brand="Satisfy",
+                          url=f"{STORE}/collections/new", strategy="shopify",
+                          kind="collection", target_ref="new",
+                          base_interval_s=300)
+    respx.get(url__startswith=f"{STORE}/collections/new/products.json").mock(
+        return_value=httpx.Response(429))
+
+    await scheduler.check_watch(db.get_watch(wid))
+
+    w = db.get_watch(wid)
+    gap = (parse(w["next_check_at"]) - utcnow()).total_seconds()
+    assert gap < 9 * 60, f"a single 429 deferred the next poll by {gap:.0f}s"
+    assert w["enabled"] == 1, "and a 429 still never pauses a healthy watch"
+
+
+@respx.mock
+async def test_clean_checks_speed_a_watch_back_up():
+    wid = db.create_watch(name="Satisfy", brand="Satisfy",
+                          url=f"{STORE}/collections/new", strategy="shopify",
+                          kind="collection", target_ref="new",
+                          base_interval_s=300)
+    respx.get(url__startswith=f"{STORE}/collections/new/products.json").mock(
+        return_value=httpx.Response(200, json=_catalogue(["a"])))
+
+    await scheduler.check_watch(db.get_watch(wid))
+
+    assert db.get_watch(wid)["base_interval_s"] < 300
+
+
+@respx.mock
+async def test_arming_a_watch_does_not_permanently_reset_its_cadence():
+    """Arming is temporary. The controller learns the base cadence, so feeding
+    it the armed interval would make a one-hour arming permanent."""
+    from monitor.timeutil import stamp_in
+
+    wid = db.create_watch(name="Satisfy", brand="Satisfy",
+                          url=f"{STORE}/collections/new", strategy="shopify",
+                          kind="collection", target_ref="new",
+                          base_interval_s=300, hot_interval_s=45,
+                          hot_until=stamp_in(3600))
+    respx.get(url__startswith=f"{STORE}/collections/new/products.json").mock(
+        return_value=httpx.Response(200, json=_catalogue(["a"])))
+
+    await scheduler.check_watch(db.get_watch(wid))
+
+    w = db.get_watch(wid)
+    assert w["base_interval_s"] > 45, \
+        "the armed 45s must not be written back as the normal cadence"
+    assert w["base_interval_s"] < 300, "the base still learns from a clean check"

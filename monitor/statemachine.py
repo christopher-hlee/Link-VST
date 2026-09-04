@@ -182,18 +182,51 @@ def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
     known = set(prev_baseline)
     fresh = [h for h in handles if h not in known]
     if fresh:
+        payload = {**_prune(_payload(result), fresh),
+                   "handles": fresh,
+                   # What the catalogue held before this sweep, so the alert
+                   # can say "214 -> 217".
+                   "baseline_count": len(known)}
+        lag = _detection_lag(payload, fresh)
+        if lag is not None:
+            payload["listed_ago_s"] = lag
         events.append(Event(kind=NEW_PRODUCT, from_state=prev_state,
-                            to_state=WATCHING,
-                            payload={**_prune(_payload(result), fresh),
-                                     "handles": fresh,
-                                     # What the catalogue held before this sweep,
-                                     # so the alert can say "214 -> 217".
-                                     "baseline_count": len(known)}))
+                            to_state=WATCHING, payload=payload))
 
     # Union, so a product briefly dropping out of the feed doesn't re-alert
     # when it comes back.
     return Decision(state=WATCHING, failures=0, events=events,
                     baseline=sorted(known | set(handles)))
+
+
+def _detection_lag(payload: dict, fresh: list[str]) -> int | None:
+    """Seconds between the store listing the item and us noticing.
+
+    This is the number that decomposes "the alert was late" into our polling
+    lag versus a stale CDN document. Returns None when the store gives no
+    usable timestamp — an unknown lag must read as unknown, never as zero.
+    """
+    from datetime import datetime, timezone
+
+    items = payload.get("items") or {}
+    newest = None
+    for handle in fresh:
+        raw = (items.get(handle) or {}).get("published_at")
+        if not isinstance(raw, str):
+            continue
+        try:
+            when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if newest is None or when > newest:
+            newest = when
+    if newest is None:
+        return None
+    lag = (datetime.now(timezone.utc) - newest).total_seconds()
+    # A future timestamp means clock skew, not a negative lag.
+    return int(lag) if lag >= 0 else None
 
 
 # Per-handle maps a strategy returns for the whole catalogue. Only the handles
@@ -235,3 +268,48 @@ def next_interval(base_s: int, hot_s: int, hot_until_ts: float | None,
     if hot_until_ts is not None and hot_until_ts > now_ts:
         return hot_s
     return base_s
+
+
+# Bounds for the learned polling interval. The floor is the existing hot tier,
+# which is the fastest this project has ever asked a store for; the ceiling is
+# the slow tier, so a hostile afternoon can never silence a watch entirely.
+INTERVAL_FLOOR = 45
+INTERVAL_CEILING = 900
+SPEEDUP_STEP = 15          # additive increase in rate, per clean check
+SLOWDOWN_FACTOR = 1.5      # multiplicative decrease on a 429
+# Multiplying an already-slow interval overshoots: 1.5x on five minutes is
+# another four and a half minutes blind, which is the problem this set out to
+# fix rather than a fix for it. Cap what a single 429 may cost.
+MAX_BACKOFF_STEP = 120
+
+
+def adapt_interval(current_s: int, *, rate_limited: bool,
+                   retry_after: float | None = None,
+                   floor_s: int = INTERVAL_FLOOR,
+                   ceiling_s: int = INTERVAL_CEILING) -> int:
+    """Poll as fast as this particular store tolerates.
+
+    Additive-increase / multiplicative-decrease, the same shape TCP uses for
+    congestion. Every clean check earns a little more speed; a 429 gives a lot
+    of it back at once, because being wrong in the fast direction gets the watch
+    banned while being wrong in the slow direction only costs latency.
+
+    This exists because fixed tiers force a guess that is wrong for some store.
+    Hardcoding 45s is what triggered the rate-limit storm that auto-paused a
+    healthy watch; leaving it at five minutes is how a drop is missed by sixteen
+    minutes. A controller measures instead of guessing.
+    """
+    current = max(int(current_s or floor_s), 1)
+
+    if rate_limited:
+        # Retry-After is the store stating its terms. Prefer it over our guess,
+        # but never let it drop us below the interval we were already using.
+        if retry_after and retry_after > 0:
+            proposed = max(int(retry_after), current)
+        else:
+            proposed = min(int(current * SLOWDOWN_FACTOR),
+                           current + MAX_BACKOFF_STEP)
+    else:
+        proposed = current - SPEEDUP_STEP
+
+    return max(floor_s, min(ceiling_s, proposed))

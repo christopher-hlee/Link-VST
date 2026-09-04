@@ -45,6 +45,14 @@ def _money(value) -> str:
     return f"${amount:,.0f}" if amount == int(amount) else f"${amount:,.2f}"
 
 
+def _ago(seconds: int) -> str:
+    if seconds < 90:
+        return f"{seconds}s"
+    if seconds < 5400:
+        return f"{round(seconds / 60)}m"
+    return f"{round(seconds / 3600)}h"
+
+
 def _sizes(payload: dict) -> list[str]:
     return [o["title"] for o in (payload.get("offers") or [])
             if o.get("title") and o["title"].lower() not in ("default title", "default")]
@@ -121,7 +129,10 @@ def render(watch: dict, kind: str, payload: dict) -> str:
             return "\n".join(lines)
 
         lines.append(f"<b>🆕 {n} new from {_esc(brand or title)}</b>")
-        lines.append("Not in the catalogue an hour ago:")
+        # Not "an hour ago": the poll interval adapts per store and is usually
+        # far shorter, so naming a duration we do not know is a small lie in a
+        # message whose whole value is being trusted about timing.
+        lines.append("Not in the catalogue on the previous sweep:")
         for h in handles[:10]:
             lines.append(f"· {_esc(titles.get(h) or h)}")
         if n > 10:
@@ -130,6 +141,12 @@ def render(watch: dict, kind: str, payload: dict) -> str:
         if before is not None:
             lines.append("")
             lines.append(f"<code>{before} → {before + n} products</code>")
+        # How far behind the store we were. Without this, "the alert was late"
+        # can only be argued about; with it, the lag is a number you can read
+        # off your phone.
+        lag = payload.get("listed_ago_s")
+        if isinstance(lag, int):
+            lines.append(f"<code>listed {_ago(lag)} before this alert</code>")
         return "\n".join(lines)
 
     if kind == PRICE_DROP:
