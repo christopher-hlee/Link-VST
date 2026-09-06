@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crate Digger</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23151210'/><circle cx='50' cy='50' r='30' fill='none' stroke='%23c9a227' stroke-width='2'/><circle cx='50' cy='50' r='12' fill='%23c9a227'/><circle cx='50' cy='50' r='3' fill='%23151210'/></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="record" aria-hidden="true"></span>
+    <h1>Crate Digger</h1>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" data-view="dig" role="tab">Dig</button>
+    <button class="tab" data-view="search" role="tab">Search</button>
+    <button class="tab" data-view="crate" role="tab">Crate</button>
+  </nav>
+  <div class="topbar-right">
+    <button id="add-youtube" class="btn btn-ghost" title="Add a YouTube video as a lead">+ YouTube</button>
+    <button id="add-import" class="btn btn-ghost" title="Import a file you already have">+ Import</button>
+    <div id="jobs-chip" class="chip" hidden><span class="spinner"></span><span id="jobs-count">0</span> working</div>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="pane pane-list">
+
+    <!-- ── DIG ─────────────────────────────────────────────── -->
+    <div class="view" id="view-dig">
+      <div class="dig-head">
+        <div>
+          <h2 id="dig-name">Pick a seam</h2>
+          <p id="dig-blurb" class="muted">Every dig lands on a random page. Page one is what everybody already has.</p>
+        </div>
+        <button id="dig-again" class="btn btn-primary" disabled>Dig again</button>
+      </div>
+      <div id="dig-picker" class="dig-picker"></div>
+      <div id="dig-results" class="dig-results"></div>
+      <div class="keyhint">
+        <kbd>Space</kbd> play · <kbd>S</kbd> keep · <kbd>X</kbd> pass · <kbd>↓</kbd>/<kbd>↑</kbd> move
+      </div>
+    </div>
+
+    <!-- ── SEARCH ──────────────────────────────────────────── -->
+    <div class="view" id="view-search" hidden>
+      <form id="search-form" class="search-form">
+        <div class="row">
+          <input id="s-q" type="search" placeholder="upright bass, gospel choir, bossa…" autocomplete="off">
+          <select id="s-source">
+            <option value="ia">Internet Archive</option>
+            <option value="openverse">Openverse (CC)</option>
+            <option value="discogs">Discogs (leads)</option>
+          </select>
+          <button class="btn btn-primary" type="submit">Search</button>
+        </div>
+        <div class="row row-filters" data-only="ia">
+          <label>Years <input id="s-yf" type="number" min="1900" max="2030" placeholder="1962" inputmode="numeric"></label>
+          <label>to <input id="s-yt" type="number" min="1900" max="2030" placeholder="1978" inputmode="numeric"></label>
+          <label>Collections <input id="s-coll" type="text" placeholder="georgeblood, unlockedrecordings"></label>
+          <label>Subjects <input id="s-subj" type="text" placeholder="Soul, Jazz"></label>
+        </div>
+      </form>
+      <div id="search-results" class="dig-results"></div>
+    </div>
+
+    <!-- ── CRATE ───────────────────────────────────────────── -->
+    <div class="view" id="view-crate" hidden>
+      <div class="crate-filters">
+        <input id="l-q" type="search" placeholder="Filter your crate…" autocomplete="off">
+        <select id="l-sort">
+          <option value="recent">Newest first</option>
+          <option value="bpm">BPM ↑</option>
+          <option value="bpm_desc">BPM ↓</option>
+          <option value="breaks">Most drums</option>
+          <option value="smooth">Least drums</option>
+          <option value="year">Year ↑</option>
+          <option value="title">Title</option>
+        </select>
+        <label class="mini">BPM <input id="l-bmin" type="number" placeholder="60" inputmode="numeric"> – <input id="l-bmax" type="number" placeholder="110" inputmode="numeric"></label>
+        <label class="mini"><input id="l-star" type="checkbox"> Starred</label>
+        <select id="l-crate"><option value="">All crates</option></select>
+      </div>
+      <div id="crate-stats" class="muted small"></div>
+      <div id="library-results" class="library-list"></div>
+    </div>
+  </section>
+
+  <!-- ── DETAIL ────────────────────────────────────────────── -->
+  <aside class="pane pane-detail" id="detail" hidden>
+    <div class="detail-head">
+      <div class="detail-title">
+        <h2 id="d-title">—</h2>
+        <p id="d-sub" class="muted"></p>
+      </div>
+      <button id="d-close" class="btn btn-ghost" aria-label="Close">✕</button>
+    </div>
+
+    <div id="d-badges" class="badges"></div>
+
+    <div class="wave-wrap">
+      <canvas id="wave" height="150"></canvas>
+      <div id="wave-empty" class="wave-empty muted">No waveform yet</div>
+    </div>
+
+    <div class="transport">
+      <button id="t-play" class="btn btn-primary">▶</button>
+      <span id="t-time" class="mono">0:00 / 0:00</span>
+      <label class="mini"><input id="t-loop" type="checkbox" checked> Loop region</label>
+      <span id="t-region" class="mono muted"></span>
+    </div>
+
+    <div class="tools">
+      <div class="tool">
+        <h3>Loop</h3>
+        <p class="muted small">Drag across the waveform to set the region. Varispeed pitches it like tape — the way it was always done.</p>
+        <div class="row">
+          <label class="mini">To BPM <input id="loop-bpm" type="number" placeholder="90" inputmode="numeric"></label>
+          <button id="loop-render" class="btn">Render loop</button>
+          <label class="mini"><input id="loop-daw" type="checkbox"> → DAW folder</label>
+        </div>
+        <div id="loop-out" class="renders"></div>
+      </div>
+
+      <div class="tool">
+        <h3>Chop</h3>
+        <div class="row">
+          <select id="chop-mode">
+            <option value="transient">At the hits</option>
+            <option value="grid">On the grid</option>
+          </select>
+          <label class="mini" id="chop-sens-wrap">Sensitivity
+            <input id="chop-sens" type="range" min="0.3" max="4" step="0.1" value="1">
+            <span id="chop-sens-val" class="mono">1.0</span>
+          </label>
+          <label class="mini" id="chop-div-wrap" hidden>Step
+            <select id="chop-div">
+              <option value="0.5">1/8</option>
+              <option value="1">1/4</option>
+              <option value="2">1/2</option>
+              <option value="4" selected>1 bar</option>
+              <option value="8">2 bars</option>
+            </select>
+          </label>
+          <button id="chop-preview" class="btn">Preview</button>
+          <button id="chop-export" class="btn btn-primary">Export kit</button>
+        </div>
+        <div id="chop-out" class="pads"></div>
+      </div>
+
+      <div class="tool">
+        <h3>Out</h3>
+        <div class="row">
+          <div id="drag-whole" class="draghandle" draggable="true" title="Drag me into your DAW">⠿ Drag the whole record</div>
+          <button id="d-daw" class="btn btn-ghost">Send to DAW folder</button>
+          <a id="d-dl" class="btn btn-ghost" download>Save file</a>
+        </div>
+        <p id="drag-note" class="muted small"></p>
+      </div>
+
+      <div class="tool">
+        <h3>Notes</h3>
+        <textarea id="d-notes" rows="3" placeholder="Bar 33, the horn stab…"></textarea>
+        <div class="row">
+          <button id="d-star" class="btn btn-ghost">☆ Star</button>
+          <select id="d-crate-add"><option value="">Add to crate…</option></select>
+          <button id="d-reanalyze" class="btn btn-ghost">Re-analyse</button>
+          <a id="d-source" class="btn btn-ghost" target="_blank" rel="noopener">Source ↗</a>
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div id="toasts" class="toasts"></div>
+
+<dialog id="modal">
+  <form method="dialog" class="modal-body">
+    <h3 id="modal-title">Add</h3>
+    <p id="modal-help" class="muted small"></p>
+    <input id="modal-input" type="text" autocomplete="off">
+    <label class="mini" id="modal-check-wrap" hidden><input id="modal-check" type="checkbox"> <span id="modal-check-label"></span></label>
+    <div class="row right">
+      <button value="cancel" class="btn btn-ghost">Cancel</button>
+      <button value="ok" class="btn btn-primary" id="modal-ok">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<audio id="player" preload="metadata"></audio>
+<script src="/static/app.js" type="module"></script>
+</body>
+</html>
