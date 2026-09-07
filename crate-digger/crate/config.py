@@ -9,12 +9,21 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _expand(path: Path | str) -> Path:
+    """Resolve ~ and $VARS.
+
+    A path out of .env or the environment is just text: `~/CrateDigger` would
+    otherwise create a directory literally named `~` in the working directory.
+    """
+    return Path(os.path.expandvars(str(path))).expanduser()
+
+
 def _default_library() -> Path:
-    return Path(os.environ.get("CRATE_LIBRARY_DIR", Path.home() / "CrateDigger"))
+    return _expand(os.environ.get("CRATE_LIBRARY_DIR", Path.home() / "CrateDigger"))
 
 
 class Settings(BaseSettings):
@@ -50,6 +59,11 @@ class Settings(BaseSettings):
     enable_ripper: bool = False
     ripper_bin: str = "yt-dlp"
     ripper_format: str = "bestaudio/best"
+
+    @field_validator("library_dir", "export_dir", mode="before")
+    @classmethod
+    def _expand_paths(cls, value):
+        return _expand(value) if value not in (None, "") else None
 
     @property
     def db_path(self) -> Path:

@@ -79,3 +79,19 @@ def test_schema_is_created_once(settings):
     assert b.one("SELECT value FROM meta WHERE key='schema_version'")["value"] == "1"
     a.close()
     b.close()
+
+
+def test_tilde_and_vars_in_paths_are_expanded(tmp_path, monkeypatch):
+    """`CRATE_LIBRARY_DIR=~/CrateDigger` must not create a folder named '~'."""
+    from crate.config import Settings
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CRATE_BASE", str(tmp_path))
+    s = Settings(library_dir="~/CrateDigger", export_dir="$CRATE_BASE/daw")
+    assert s.library_dir == tmp_path / "CrateDigger"
+    assert s.export_dir == tmp_path / "daw"
+    assert "~" not in str(s.library_dir)
+
+    s.ensure_dirs()
+    assert (tmp_path / "CrateDigger" / "audio").is_dir()
+    assert (tmp_path / "daw").is_dir()
