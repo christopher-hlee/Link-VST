@@ -5,7 +5,7 @@ Polls product pages and alerts on Telegram when something restocks or a new drop
 lands. Targets: Shopify storefronts, Target (RedSky), Best Buy (developer API).
 
 ## Repo
-https://github.com/christopher-hlee/restock-monitor
+https://github.com/christopher-hlee/restock
 
 ## Server
 - Python 3.12, FastAPI, SQLite (WAL), APScheduler, httpx

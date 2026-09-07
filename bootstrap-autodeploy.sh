@@ -5,8 +5,8 @@ set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 
 APP_DIR="$(pwd)"
-BRANCH="${BRANCH:-claude/ionos-vps-product-monitor-gflhfy}"
-REMOTE="${REMOTE:-https://github.com/christopher-hlee/Link-VST.git}"
+BRANCH="${BRANCH:-main}"
+REMOTE="${REMOTE:-https://github.com/christopher-hlee/restock.git}"
 
 echo "==> Auto-deploy setup for $APP_DIR"
 
