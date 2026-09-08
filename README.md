@@ -107,6 +107,19 @@ Auto-detected from the URL you paste — you never pick one.
   far less contested than online stock.
 - **`bestbuy`** — the official developer API. Needs a free `BESTBUY_API_KEY`.
 
+- **`retail`** — reads the schema.org JSON-LD that retailers embed for Google
+  Shopping. A documented public standard rather than a private API scraped from
+  a site's own frontend, which is the distinction that killed the Target
+  strategy when RedSky retired its endpoint. Handles the storefronts nothing
+  else understands — Nintendo, GameStop, most of the rest — and carries
+  `PreOrder`, so "available at a later date" flipping to "preorder now" is a
+  state change it can see. **Tried last on purpose**: Shopify pages publish
+  JSON-LD too, and the Shopify strategy is strictly better for them.
+
+  A page it cannot parse reports `failing` with a specific reason, never
+  "sold out". An unreadable page says nothing about stock, and claiming
+  otherwise would look identical to the truth for the life of the watch.
+
 - **`announce`** — new entries in an Atom/RSS feed or a Shopify search endpoint,
   filtered by keyword. This is the one that can track something with no product
   page yet; everything else presupposes a URL to poll. Keywords take two forms:

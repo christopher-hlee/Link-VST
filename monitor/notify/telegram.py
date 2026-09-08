@@ -162,7 +162,12 @@ def render(watch: dict, kind: str, payload: dict) -> str:
                if o.get("title")]
     sizes = _sizes(payload)
 
-    if matched:
+    if payload.get("preorder"):
+        # A preorder is not a restock. You are paying now for delivery later,
+        # and for a console launch that is the moment worth waking up for —
+        # calling it "back in stock" would be both wrong and less urgent.
+        lines.append(f"<b>⚡ Preorder open — {_esc(title)}</b>")
+    elif matched:
         lines.append(f"<b>⚡ Back in your size — {_esc(title)}</b>")
     else:
         lines.append(f"<b>⚡ Back in stock — {_esc(title)}</b>")

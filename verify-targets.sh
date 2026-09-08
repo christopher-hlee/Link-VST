@@ -169,6 +169,51 @@ PYEOF
   fi
 fi
 
+# ---------------------------------------------------------------- Nintendo
+# Does this IP get a page with schema.org data in the HTML? That is the whole
+# question for the `retail` strategy: if the listing is rendered in the browser
+# instead, no polling rate helps and the answer is a feed watch or the Worker
+# proxy. Pass a real product URL as NINTENDO_URL to test the item you care about.
+echo
+echo "${bold}Nintendo (schema.org JSON-LD)${rst}"
+NINTENDO_URL="${NINTENDO_URL:-https://www.nintendo.com/us/store/products/the-legend-of-zelda-ocarina-of-time-switch-2-edition/}"
+CODE=$(probe "$NINTENDO_URL")
+case "$CODE" in
+  200)
+    if grep -qi 'application/ld+json' "$BODY_FILE"; then
+      echo "  ${grn}✓${rst} page served and carries JSON-LD   $CODE"
+      AVAIL=$(grep -oiE 'schema\.org/(InStock|OutOfStock|PreOrder|PreSale|BackOrder|SoldOut|Discontinued)' \
+              "$BODY_FILE" | sort -u | tr '\n' ' ')
+      NAME=$(grep -oE '"name"[[:space:]]*:[[:space:]]*"[^"]{3,80}"' "$BODY_FILE" | head -1)
+      echo "     ${dim}${NAME:-no name field found}${rst}"
+      if [ -n "$AVAIL" ]; then
+        echo "     ${grn}availability: $AVAIL${rst}"
+        echo "     ${dim}Paste this URL into Add a watch — it is readable.${rst}"
+      else
+        echo "     ${ylw}no availability value yet${rst} — listed but not orderable,"
+        echo "     ${dim}which is exactly what a watch is for. Add it.${rst}"
+      fi
+      row "retail" "nintendo.com (json-ld)" "$CODE" "usable"
+    else
+      echo "  ${ylw}?${rst} page served but NO JSON-LD        $CODE"
+      echo "     ${dim}Rendered in the browser. The retail strategy cannot read it;${rst}"
+      echo "     ${dim}use an announce watch on a Nintendo feed instead.${rst}"
+      row "retail" "nintendo.com (json-ld)" "$CODE" "no structured data"
+    fi ;;
+  403|429)
+    echo "  ${red}✗${rst} refused from this IP               $CODE"
+    echo "     ${dim}Bot protection. worker/ re-issues requests from Cloudflare's edge.${rst}"
+    row "retail" "nintendo.com (json-ld)" "$CODE" "BLOCKED" ;;
+  404)
+    echo "  ${ylw}?${rst} no such product page               $CODE"
+    echo "     ${dim}Not listed yet, or the URL changed. Re-run with:${rst}"
+    echo "     ${dim}NINTENDO_URL='https://...' ./verify-targets.sh${rst}"
+    row "retail" "nintendo.com (json-ld)" "$CODE" "not listed" ;;
+  *)
+    echo "  ${ylw}?${rst} unexpected                         $CODE"
+    row "retail" "nintendo.com (json-ld)" "$CODE" "$(verdict "$CODE")" ;;
+esac
+
 # ---------------------------------------------------------------- Best Buy
 echo
 echo "${bold}Best Buy${rst}"
