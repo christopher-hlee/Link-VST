@@ -128,11 +128,24 @@ def render(watch: dict, kind: str, payload: dict) -> str:
                 lines.append(f"· …and {n - 10} more")
             return "\n".join(lines)
 
-        lines.append(f"<b>🆕 {n} new from {_esc(brand or title)}</b>")
-        # Not "an hour ago": the poll interval adapts per store and is usually
-        # far shorter, so naming a duration we do not know is a small lie in a
-        # message whose whole value is being trusted about timing.
-        lines.append("Not in the catalogue on the previous sweep:")
+        arrival = payload.get("arrival") or "new"
+        if arrival == "relisted":
+            # Republished, not released. Shopify resets published_at when an
+            # item comes back, so without saying this the alert would present a
+            # years-old product as a fresh drop.
+            lines.append(f"<b>♻️ {n} relisted at {_esc(brand or title)}</b>")
+            lines.append("Back on the site, but first listed a long time ago:")
+        elif arrival == "unconfirmed":
+            lines.append(f"<b>🆕 {n} new to me from {_esc(brand or title)}</b>")
+            lines.append("The store gave no listing date, so I cannot confirm "
+                         "this is a new release:")
+        else:
+            lines.append(f"<b>🆕 {n} new from {_esc(brand or title)}</b>")
+            # Never "not in the catalogue" — that asserts something about the
+            # STORE that we do not know. All we ever knew is that it was not in
+            # our own baseline, and treating those as the same thing is what
+            # reported a 329-day-old product as a new release.
+            lines.append("Just listed:")
         for h in handles[:10]:
             lines.append(f"· {_esc(titles.get(h) or h)}")
         if n > 10:
@@ -146,7 +159,11 @@ def render(watch: dict, kind: str, payload: dict) -> str:
         # off your phone.
         lag = payload.get("listed_ago_s")
         if isinstance(lag, int):
-            lines.append(f"<code>listed {_ago(lag)} before this alert</code>")
+            # For a relist the timestamp is when it came BACK, not when it was
+            # first sold. Saying "listed" there would restate the confusion
+            # this whole change exists to clear up.
+            verb = "relisted" if arrival == "relisted" else "listed"
+            lines.append(f"<code>{verb} {_ago(lag)} before this alert</code>")
         return "\n".join(lines)
 
     if kind == PRICE_DROP:

@@ -155,15 +155,23 @@ async def test_the_store_publish_time_is_captured():
 
 
 @respx.mock
-async def test_created_at_stands_in_when_there_is_no_publish_time():
+async def test_publish_and_creation_times_are_kept_apart():
+    """They used to be collapsed with `or`. Shopify resets published_at when an
+    item is relisted while created_at stays put, so that single `or` destroyed
+    the only evidence separating a new release from an old item coming back —
+    and reported a sold-out shirt as "listed 6m ago"."""
     respx.get(url__startswith=f"{STORE}/collections/shop-all/products.json").mock(
         return_value=httpx.Response(200, json={"products": [
-            {"handle": "x", "title": "X", "created_at": "2026-09-02T10:00:00Z",
+            {"handle": "x", "title": "X",
+             "published_at": "2026-09-02T10:00:00Z",
+             "created_at": "2025-01-05T09:00:00Z",
              "variants": []}]}))
 
     r = await shopify.check(collection_watch())
+    item = r.extra["items"]["x"]
 
-    assert r.extra["items"]["x"]["published_at"] == "2026-09-02T10:00:00Z"
+    assert item["published_at"] == "2026-09-02T10:00:00Z"
+    assert item["created_at"] == "2025-01-05T09:00:00Z"
 
 
 # --- the alert has to state the lag ----------------------------------------
@@ -186,7 +194,11 @@ def test_the_alert_claims_no_lag_it_cannot_measure():
         {"name": "Satisfy", "brand": "satisfyrunning.com"}, "new_product",
         {"handles": ["a"], "titles": {"a": "Climb Pants"}, "baseline_count": 256})
 
-    assert "listed" not in body, "an unknown lag must not render as zero"
+    # Assert on the lag sentence itself. A bare "listed" also matches ordinary
+    # copy like "Just listed:", which makes the test fail for reasons that have
+    # nothing to do with what it is checking.
+    assert "before this alert" not in body, \
+        "an unknown lag must not render as zero"
 
 
 def test_the_alert_does_not_invent_a_polling_interval():

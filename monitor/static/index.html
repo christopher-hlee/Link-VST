@@ -105,6 +105,8 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .fired .fi a:hover{color:var(--accent)}
 .fired .fi .k{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.18em;
   text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+.fired .tag{margin-left:9px;padding:1px 6px;border:1px solid var(--dim);color:var(--held);
+  letter-spacing:.14em}
 .fired .fp{font-family:var(--serif);font-size:15px;color:var(--muted)}
 .fired .ft{font-size:11px;color:var(--faint)}
 /* Detection lag. Amber past five minutes, because that is the point at which
@@ -567,9 +569,17 @@ function dropRow(it, e, announce) {
     : it.url
     ? `<button class="chip mini" onclick="window.open('${esc(it.url)}','_blank','noopener')">${announce ? 'Read' : 'Open'}</button>`
     : '<span class="caption">no link</span>';
+  /* A relist is not a release. Saying so on the row keeps the "just dropped"
+     count honest instead of quietly inflating it with old stock returning. */
+  const arrival = (e.payload || {}).arrival;
+  const tag = arrival === 'relisted'
+    ? '<span class="tag">relisted</span>'
+    : arrival === 'unconfirmed'
+    ? '<span class="tag" title="The store gave no listing date, so this may not be new">unverified</span>'
+    : '';
   return `<div class="fired">
     <span class="fi">
-      <span class="k">${esc(evName(e))}</span>
+      <span class="k">${esc(evName(e))}${tag}</span>
       ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>`
                : esc(it.title)}
     </span>

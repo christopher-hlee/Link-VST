@@ -144,10 +144,18 @@ def _collection_item(base: str, product: dict) -> dict:
         "price": offers[0]["price"] if offers else None,
         "image": _image_url(images[0] if images else None),
         "offers": offers[:12],
-        # When the store actually listed it. This is the only way to tell our
-        # own polling lag apart from a stale CDN document — without it, "the
-        # alert was late" is an argument rather than a measurement.
-        "published_at": product.get("published_at") or product.get("created_at"),
+        # Two different facts, kept apart on purpose.
+        #
+        # published_at is when the store made it visible, and is what tells our
+        # polling lag apart from a stale CDN document. But Shopify RESETS it
+        # when a product is unpublished and republished, so a years-old item
+        # coming back looks brand new by this field alone.
+        #
+        # created_at does not move. The gap between them is what separates a
+        # genuine release from a relist — collapsing the two with `or` is
+        # exactly what made an old sold-out item read as "listed 6m ago".
+        "published_at": product.get("published_at"),
+        "created_at": product.get("created_at"),
     }
 
 
@@ -285,9 +293,17 @@ async def _check_collection(watch: dict) -> CheckResult:
                 break
             products += batch
 
-        handles = [p.get("handle") for p in products if p.get("handle")]
-        items = {p["handle"]: _collection_item(base, p)
-                 for p in products if p.get("handle")}
+        # De-duplicated, order preserved. Not every store honours `&page=`; one
+        # that ignores it hands back the same 250 products for every page, and
+        # a raw list would then name a single new product four times over.
+        items = {}
+        handles = []
+        for product in products:
+            handle = product.get("handle")
+            if handle and handle not in items:
+                items[handle] = _collection_item(base, product)
+                handles.append(handle)
+
         return CheckResult(
             ok=True,
             state=IN_STOCK if products else OUT_OF_STOCK,
@@ -297,7 +313,14 @@ async def _check_collection(watch: dict) -> CheckResult:
             http_status=resp.status,
             etag=resp.etag,
             last_modified=resp.last_modified,
-            extra={"product_count": len(products),
+            extra={"product_count": len(handles),
+                   # Rows read vs unique products vs pages fetched. If a store
+                   # ignores `&page=`, rows_read is pages × 250 while
+                   # product_count stays at 250 — which is the difference
+                   # between "we can see the whole catalogue" and "we are still
+                   # looking through a 250-item window and cannot tell".
+                   "rows_read": len(products),
+                   "pages_fetched": page,
                    "source": "products.json",
                    "titles": {h: items[h]["title"] for h in items},
                    # The handle is the store's own canonical identifier, so the
@@ -333,7 +356,7 @@ async def _check_collection_atom(base: str, coll: str | None, watch: dict,
         link = entry.find("a:link", _ATOM_NS)
         href = link.get("href") if link is not None else None
         handle = product_handle(href) if href else None
-        if handle:
+        if handle and handle not in items:
             handles.append(handle)
             title_el = entry.find("a:title", _ATOM_NS)
             title = title_el.text if title_el is not None else None
@@ -341,8 +364,18 @@ async def _check_collection_atom(base: str, coll: str | None, watch: dict,
             # The feed carries no variants and no prices, so an item here can
             # only ever open the product page — never a cart permalink.
             links[handle] = href
-            items[handle] = {"url": href, "title": title,
-                             "price": None, "image": None, "offers": []}
+            # It does carry dates, and those decide whether an entry is a new
+            # release or simply one we had not seen before. Discarding them
+            # left the diff with nothing but our own memory to go on.
+            published = entry.find("a:published", _ATOM_NS)
+            updated = entry.find("a:updated", _ATOM_NS)
+            items[handle] = {
+                "url": href, "title": title,
+                "price": None, "image": None, "offers": [],
+                "published_at": published.text if published is not None
+                else (updated.text if updated is not None else None),
+                "created_at": published.text if published is not None else None,
+            }
 
     return CheckResult(
         ok=True,

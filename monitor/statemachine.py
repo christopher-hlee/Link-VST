@@ -7,6 +7,8 @@ out". Conflating those is how monitors silently stop working while looking fine.
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .timeutil import parse, utcnow
+
 # Stock states. `error` is deliberately NOT one of them — see module docstring.
 UNKNOWN = "unknown"
 IN_STOCK = "in_stock"
@@ -84,6 +86,7 @@ def decide(
     prev_price: float | None,
     result: CheckResult,
     failure_threshold: int = 5,
+    window_start=None,
 ) -> Decision:
     """Fold a check result into a new persisted state plus any events to fire."""
     if result.rate_limited:
@@ -114,7 +117,8 @@ def decide(
                         baseline=prev_baseline, price=prev_price)
 
     if kind == "collection":
-        return _decide_collection(prev_state, prev_baseline, result, events)
+        return _decide_collection(prev_state, prev_baseline, result, events,
+                                  window_start)
 
     return _decide_product(prev_state, prev_price, result, events)
 
@@ -171,7 +175,8 @@ def _decide_product(prev_state, prev_price, result, events) -> Decision:
                     price=result.price if result.price is not None else prev_price)
 
 
-def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
+def _decide_collection(prev_state, prev_baseline, result, events,
+                       window_start=None) -> Decision:
     handles = list(result.handles or [])
 
     # First successful check just records what's there.
@@ -180,10 +185,30 @@ def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
                         baseline=handles)
 
     known = set(prev_baseline)
-    fresh = [h for h in handles if h not in known]
-    if fresh:
+    unseen = [h for h in handles if h not in known]
+
+    # The baseline is a dedupe ledger, not the trigger. Being absent from it
+    # only means we have not seen the product; whether the STORE considers it
+    # new is a separate question, and the only one worth alerting on.
+    items = (result.extra or {}).get("items") or {}
+    now = utcnow()
+    start = window_start if window_start is not None else now
+
+    buckets: dict[str, list[str]] = {}
+    for handle in unseen:
+        arrival = classify_arrival(items.get(handle) or {},
+                                   window_start=start, now=now)
+        buckets.setdefault(arrival, []).append(handle)
+
+    # ARRIVAL_KNOWN is absorbed in silence: it was already on the shelf, we
+    # just had not looked at it. That single line is the whole fix.
+    for kind in (ARRIVAL_NEW, ARRIVAL_RELISTED, ARRIVAL_UNCONFIRMED):
+        fresh = buckets.get(kind)
+        if not fresh:
+            continue
         payload = {**_prune(_payload(result), fresh),
                    "handles": fresh,
+                   "arrival": kind,
                    # What the catalogue held before this sweep, so the alert
                    # can say "214 -> 217".
                    "baseline_count": len(known)}
@@ -197,6 +222,50 @@ def _decide_collection(prev_state, prev_baseline, result, events) -> Decision:
     # when it comes back.
     return Decision(state=WATCHING, failures=0, events=events,
                     baseline=sorted(known | set(handles)))
+
+
+# How a product that is new *to us* relates to the store's own record of it.
+ARRIVAL_NEW = "new"                # the store published it since we last looked
+ARRIVAL_RELISTED = "relisted"      # published since, but created long ago
+ARRIVAL_UNCONFIRMED = "unconfirmed"  # the store gave us no dates to judge by
+ARRIVAL_KNOWN = "known"            # already on the shelf; we simply hadn't seen it
+
+# A brand may stage a product days before a launch, so created_at being older
+# than published_at is normal and not evidence of a relist. Only a gap this
+# large means the item genuinely existed in a previous life.
+RELIST_GAP_S = 30 * 86400
+
+
+def classify_arrival(item: dict, *, window_start, now) -> str:
+    """Why is this product new to us — because the store published it, or
+    because we only just looked in the right place?
+
+    The bug this exists to kill: "new" used to mean "not in our baseline",
+    which is a fact about our own memory and nothing to do with the store. A
+    catalogue bigger than one page, a collection that re-sorts, or a widened
+    sweep all put previously-unseen products in front of us, and every one of
+    them fired an alert. One such item had been on sale for 329 days.
+    """
+    published = parse(item.get("published_at"))
+    created = parse(item.get("created_at"))
+
+    if published is None and created is None:
+        # Say so rather than guess. An alert that admits it could not verify is
+        # worth more than one that quietly pretends.
+        return ARRIVAL_UNCONFIRMED
+
+    appeared = published or created
+    if appeared < window_start:
+        return ARRIVAL_KNOWN
+
+    if created is not None and published is not None:
+        if (published - created).total_seconds() > RELIST_GAP_S:
+            # Shopify resets published_at when an item is unpublished and put
+            # back. created_at does not move, so this gap is the only thing
+            # separating a genuine release from an old item returning.
+            return ARRIVAL_RELISTED
+
+    return ARRIVAL_NEW
 
 
 def _detection_lag(payload: dict, fresh: list[str]) -> int | None:

@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS watches (
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     last_error   TEXT,
     last_checked_at TEXT,
+    -- The last check that actually READ the catalogue. Distinct from
+    -- last_checked_at, which also moves on failures: after a three-day outage
+    -- that one is minutes old, which would collapse the "published since we
+    -- last looked" window to nothing and hide every drop we missed.
+    last_sweep_at   TEXT,
     next_check_at   TEXT,
     last_alert_at   TEXT,
     created_at   TEXT NOT NULL DEFAULT (datetime('now'))
@@ -100,9 +105,35 @@ CREATE INDEX IF NOT EXISTS idx_events_recent ON events(id DESC);
 """
 
 
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS does
+# nothing to a table that already exists, so a live database never gains them
+# without this.
+_ADDED_COLUMNS = {
+    "watches": {"last_sweep_at": "TEXT"},
+}
+
+
+def _migrate(conn) -> None:
+    """Add any column the schema has grown since this database was created."""
+    for table, columns in _ADDED_COLUMNS.items():
+        have = {row["name"] for row in
+                conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for name, decl in columns.items():
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+    # Seed the new column from the closest thing already recorded. Leaving it
+    # NULL on an existing watch would make the first sweep after this deploy
+    # treat the entire catalogue as unverifiable and alert on all of it — the
+    # exact flood this change exists to stop.
+    conn.execute("UPDATE watches SET last_sweep_at = last_checked_at "
+                 "WHERE last_sweep_at IS NULL AND last_checked_at IS NOT NULL")
+
+
 def init_db() -> None:
     with tx() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
 
 
 # ---------------------------------------------------------------- watches
@@ -112,7 +143,7 @@ WATCH_WRITABLE = {
     "base_interval_s", "hot_interval_s", "hot_until", "alert_level", "enabled",
     "etag", "last_modified", "last_state", "last_price", "last_title",
     "last_image", "last_offers_json", "baseline_json", "consecutive_failures", "last_error",
-    "last_checked_at", "next_check_at", "last_alert_at",
+    "last_checked_at", "last_sweep_at", "next_check_at", "last_alert_at",
 }
 
 

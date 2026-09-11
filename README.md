@@ -43,6 +43,33 @@ canonical identifier, so `{store}/products/{handle}` needs no search and no
 extra request, and the variants in that same response supply the cart
 permalinks. A drop of exactly one item is treated as a restock and gets sizes.
 
+## New means new to the STORE, not new to us
+
+A drop watch used to alert on anything absent from its baseline. That is a fact
+about our own memory and says nothing about the shop: a catalogue larger than
+one page, a collection that re-sorts, or a widened sweep all put
+previously-unseen products in front of us, and every one of them fired. One
+reported item had been on sale for 329 days.
+
+So the baseline is now a **dedupe ledger, not a trigger**. Each unseen product
+is classified by the store's own timestamps:
+
+| `published_at` | `created_at` | outcome |
+|---|---|---|
+| since the last sweep | since the last sweep | **new release** — alert |
+| since the last sweep | long ago | **relisted** — alert, labelled |
+| before the last sweep | — | absorbed silently |
+| absent | absent | alert, labelled *unverified* |
+
+The window runs from the last sweep that actually **read** the catalogue, not
+the last check — after a three-day outage the latter is minutes old and would
+hide every release missed during it.
+
+Keeping `published_at` and `created_at` apart is what makes a relist legible:
+Shopify resets the publish date when an item is unpublished and put back, so a
+years-old product returning looks brand new by that field alone. Collapsing the
+two with `or` is exactly what reported a sold-out shirt as "listed 6m ago".
+
 ## The rule that shapes everything
 
 **A failed check never becomes a stock state.** A 403, a timeout, or a parse

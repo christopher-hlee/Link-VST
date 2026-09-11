@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import random
+from datetime import timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -38,6 +39,27 @@ def jittered(seconds: int) -> float:
     return seconds * (1.0 + random.uniform(-JITTER_FRACTION, JITTER_FRACTION))
 
 
+def _sweep_window(watch: dict):
+    """Anything the store published after this instant is new to us.
+
+    Measured from the last sweep that actually read the catalogue, not from the
+    last check — a watch that failed for three days would otherwise have a
+    window of seconds and hide every drop it missed.
+
+    The slack is deliberately generous. Being too wide can only let through a
+    product we genuinely had not recorded, because the baseline still
+    de-duplicates; being too narrow silently drops a real release.
+    """
+    interval = watch.get("base_interval_s") or 300
+    slack = max(2 * interval, 900)
+    last = parse(watch.get("last_sweep_at"))
+    if last is None:
+        # No recorded sweep: trust only what the store published very recently,
+        # so a first run cannot mistake an entire catalogue for a drop.
+        return utcnow() - timedelta(seconds=slack)
+    return last - timedelta(seconds=slack)
+
+
 async def check_watch(watch: dict) -> bool:
     """Run one watch end to end: fetch, decide, persist, notify.
 
@@ -60,6 +82,7 @@ async def check_watch(watch: dict) -> bool:
         prev_price=watch.get("last_price"),
         result=result,
         failure_threshold=FAILURE_ALERT_THRESHOLD,
+        window_start=_sweep_window(watch),
     )
 
     interval = next_interval(
@@ -111,6 +134,14 @@ async def check_watch(watch: dict) -> bool:
     }
     if decision.baseline is not None:
         updates["baseline_json"] = json.dumps(decision.baseline)
+    # Only a sweep that actually READ the catalogue moves this, which is why it
+    # is gated on result.ok rather than on the baseline: a failed check carries
+    # the previous baseline through unchanged, so keying off that would stamp a
+    # fresh sweep time on every failure and close the window over the very
+    # drops the outage made us miss. A 304 counts — the validator matching is
+    # the store confirming nothing changed.
+    if result.ok and (watch.get("kind") or "product") == "collection":
+        updates["last_sweep_at"] = stamp()
     if decision.pause and watch.get("enabled"):
         # A watch that has failed this many times running is not watching
         # anything. Stop polling rather than retrying into the void forever.
