@@ -35,8 +35,27 @@ BESTBUY_API_KEY = os.environ.get("BESTBUY_API_KEY", "")
 # Scheduler
 # How often the scheduler checks its own table for due watches. This adds
 # straight onto detection latency and costs no third-party requests at all,
-# so it is kept well below the polling floor.
-TICK_SECONDS = int(os.environ.get("TICK_SECONDS", "5"))
+# so it is kept well below the polling floor (statemachine.INTERVAL_FLOOR, 35s
+# — test_will_we_miss_it pins the two together).
+#
+# Clamped rather than trusted. The value is deployment-overridable, and an old
+# .env pinning 15s is exactly how the box ended up spending a quarter of its
+# one-minute budget on scheduler granularity while every local check said the
+# budget was fine. A setting that can silently cost a drop does not get to be
+# a free-text number.
+TICK_MAX_SECONDS = 8
+TICK_DEFAULT_SECONDS = 5
+
+
+def _tick_seconds() -> int:
+    try:
+        requested = int(os.environ.get("TICK_SECONDS", TICK_DEFAULT_SECONDS))
+    except ValueError:
+        return TICK_DEFAULT_SECONDS
+    return max(1, min(requested, TICK_MAX_SECONDS))
+
+
+TICK_SECONDS = _tick_seconds()
 
 # Polling defaults (seconds)
 INTERVAL_SLOW = 900

@@ -12,7 +12,9 @@ import pytest
 import respx
 
 from monitor import db, scheduler
-from monitor.config import JITTER_FRACTION, TICK_SECONDS
+from monitor.config import (
+    JITTER_FRACTION, TICK_MAX_SECONDS, TICK_SECONDS, _tick_seconds,
+)
 from monitor.statemachine import (
     ARRIVAL_NEW, INTERVAL_FLOOR, classify_arrival,
 )
@@ -120,18 +122,44 @@ async def test_a_single_page_store_still_gets_the_cheap_path():
 def test_the_worst_case_alert_arrives_inside_a_minute():
     """Asserted as a budget in seconds, so any future change to the polling
     floor or the tick that breaks the promise fails here rather than in the
-    field during a drop."""
+    field during a drop.
+
+    Budgeted against TICK_MAX_SECONDS, not the tick this process happens to
+    have resolved. An earlier version read the live value and so asserted a
+    property of whoever ran it: green on a laptop with no .env, red on the box
+    whose .env pinned 15s. A latency promise that a deployment setting can
+    quietly revoke is not a promise, so the worst *permitted* configuration is
+    what has to fit inside the minute.
+    """
     poll_gap = INTERVAL_FLOOR * (1 + JITTER_FRACTION)
     network_and_delivery = 5.0          # generous: 2 pages fetched + Telegram
 
-    worst = poll_gap + TICK_SECONDS + network_and_delivery
+    worst = poll_gap + TICK_MAX_SECONDS + network_and_delivery
 
     assert worst < 60, f"worst-case detection is {worst:.0f}s"
 
 
 def test_the_tick_never_dominates_the_polling_floor():
-    assert TICK_SECONDS <= INTERVAL_FLOOR / 4, \
+    assert TICK_MAX_SECONDS <= INTERVAL_FLOOR / 4, \
         "scheduler granularity would be a large share of total latency"
+
+
+def test_no_env_can_spend_the_budget_on_scheduler_granularity(monkeypatch):
+    """The deployment cannot opt out of the promise above."""
+    for requested, expected in [("15", TICK_MAX_SECONDS),
+                                ("900", TICK_MAX_SECONDS),
+                                ("0", 1), ("-4", 1),
+                                ("bananas", 5), ("3", 3)]:
+        monkeypatch.setenv("TICK_SECONDS", requested)
+        assert _tick_seconds() == expected, requested
+
+    monkeypatch.delenv("TICK_SECONDS")
+    assert _tick_seconds() == 5
+
+
+def test_the_running_tick_is_within_the_budget():
+    """Belt and braces: whatever this process resolved, it still fits."""
+    assert 1 <= TICK_SECONDS <= TICK_MAX_SECONDS
 
 
 # --- end to end, with a real-world timestamp ------------------------------

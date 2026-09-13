@@ -113,6 +113,12 @@ poll gap (35s floor plus 20% jitter), 5s of scheduler granularity, and a few
 seconds of fetch and delivery. A test asserts that budget in seconds, so a
 future change to either number fails there rather than during a drop.
 
+`TICK_SECONDS` is clamped to 8s no matter what `.env` asks for, and the budget
+is asserted against that ceiling rather than the running value. A test that
+reads live config asserts a property of whoever ran it: it passed on a laptop
+with no `.env` and failed on the box, whose `.env` still pinned the old 15s —
+the promise above is not something a deployment setting gets to revoke quietly.
+
 The tier is a starting point, not a setting: each watch **learns** its own
 cadence. Every clean check earns a little speed (−15s); a 429 gives it back
 multiplicatively, honouring `Retry-After` when the store sends one. Clamped to
