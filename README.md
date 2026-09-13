@@ -116,9 +116,9 @@ future change to either number fails there rather than during a drop.
 The tier is a starting point, not a setting: each watch **learns** its own
 cadence. Every clean check earns a little speed (−15s); a 429 gives it back
 multiplicatively, honouring `Retry-After` when the store sends one. Clamped to
-45s–15min. This is additive-increase/multiplicative-decrease, the shape TCP uses,
+35s–15min. This is additive-increase/multiplicative-decrease, the shape TCP uses,
 and it exists because a fixed number is wrong for every store but one —
-hardcoding 45s got a watch rate-limited and auto-paused, while five minutes let a
+hardcoding a fast interval got a watch rate-limited and auto-paused, while five minutes let a
 drop be missed by sixteen minutes.
 
 A 429 costs at most two extra minutes. It used to **double** the interval, which
