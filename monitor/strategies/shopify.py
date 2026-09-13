@@ -9,6 +9,7 @@ redesign. Two endpoints do all the work:
 
 Falls back to the Atom feed when products.json is gated, which some stores do.
 """
+import json
 import re
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
@@ -104,6 +105,22 @@ def _price(raw, *, in_cents: bool) -> float | None:
     except (TypeError, ValueError):
         return None
     return value / 100.0 if in_cents else value
+
+
+def _multi_page(watch: dict) -> bool:
+    """Has this catalogue ever needed more than one page?
+
+    Read off the baseline, which is every handle we have ever seen, so it errs
+    toward fetching more rather than trusting a validator that cannot speak for
+    the whole catalogue.
+    """
+    raw = watch.get("baseline_json")
+    if not raw:
+        return False
+    try:
+        return len(json.loads(raw)) >= PAGE_SIZE
+    except (ValueError, TypeError):
+        return True          # unreadable baseline: assume the risky case
 
 
 def _image_url(raw) -> str | None:
@@ -256,9 +273,16 @@ async def _check_collection(watch: dict) -> CheckResult:
     coll = watch.get("target_ref") or collection_handle(watch["url"])
     path = f"/collections/{coll}/products.json" if coll else "/products.json"
 
+    # A conditional request validates PAGE ONE, not the catalogue. For a store
+    # that spans several pages a new product can land on page two while page one
+    # stays byte-identical: the store answers 304, we return without ever
+    # fetching page two, and the sweep window still advances — so by the time
+    # the product is visible its publish date looks old and it is absorbed in
+    # silence. Forever. Only trust the validator when one page is everything.
+    paged = _multi_page(watch)
     resp = await fetch(f"{base}{path}?limit={PAGE_SIZE}",
-                       etag=watch.get("etag"),
-                       last_modified=watch.get("last_modified"))
+                       etag=None if paged else watch.get("etag"),
+                       last_modified=None if paged else watch.get("last_modified"))
     if resp.not_modified:
         return CheckResult(ok=True, not_modified=True, etag=resp.etag,
                            last_modified=resp.last_modified, http_status=304)

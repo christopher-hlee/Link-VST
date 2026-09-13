@@ -33,7 +33,10 @@ TARGET_API_KEY = os.environ.get(
 BESTBUY_API_KEY = os.environ.get("BESTBUY_API_KEY", "")
 
 # Scheduler
-TICK_SECONDS = int(os.environ.get("TICK_SECONDS", "15"))
+# How often the scheduler checks its own table for due watches. This adds
+# straight onto detection latency and costs no third-party requests at all,
+# so it is kept well below the polling floor.
+TICK_SECONDS = int(os.environ.get("TICK_SECONDS", "5"))
 
 # Polling defaults (seconds)
 INTERVAL_SLOW = 900

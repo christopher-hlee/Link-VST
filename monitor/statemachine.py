@@ -7,7 +7,7 @@ out". Conflating those is how monitors silently stop working while looking fine.
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .timeutil import parse, utcnow
+from .timeutil import parse_instant, utcnow
 
 # Stock states. `error` is deliberately NOT one of them — see module docstring.
 UNKNOWN = "unknown"
@@ -246,8 +246,8 @@ def classify_arrival(item: dict, *, window_start, now) -> str:
     sweep all put previously-unseen products in front of us, and every one of
     them fired an alert. One such item had been on sale for 329 days.
     """
-    published = parse(item.get("published_at"))
-    created = parse(item.get("created_at"))
+    published = parse_instant(item.get("published_at"))
+    created = parse_instant(item.get("created_at"))
 
     if published is None and created is None:
         # Say so rather than guess. An alert that admits it could not verify is
@@ -271,29 +271,19 @@ def classify_arrival(item: dict, *, window_start, now) -> str:
 def _detection_lag(payload: dict, fresh: list[str]) -> int | None:
     """Seconds between the store listing the item and us noticing.
 
-    This is the number that decomposes "the alert was late" into our polling
-    lag versus a stale CDN document. Returns None when the store gives no
-    usable timestamp — an unknown lag must read as unknown, never as zero.
+    Shares one parser with classify_arrival on purpose: this function used to
+    handle timezones correctly while the classifier truncated them, so the same
+    field was read two different ways and only one of them was right.
     """
-    from datetime import datetime, timezone
-
     items = payload.get("items") or {}
     newest = None
     for handle in fresh:
-        raw = (items.get(handle) or {}).get("published_at")
-        if not isinstance(raw, str):
-            continue
-        try:
-            when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=timezone.utc)
-        if newest is None or when > newest:
+        when = parse_instant((items.get(handle) or {}).get("published_at"))
+        if when is not None and (newest is None or when > newest):
             newest = when
     if newest is None:
         return None
-    lag = (datetime.now(timezone.utc) - newest).total_seconds()
+    lag = (utcnow() - newest).total_seconds()
     # A future timestamp means clock skew, not a negative lag.
     return int(lag) if lag >= 0 else None
 
@@ -342,7 +332,12 @@ def next_interval(base_s: int, hot_s: int, hot_until_ts: float | None,
 # Bounds for the learned polling interval. The floor is the existing hot tier,
 # which is the fastest this project has ever asked a store for; the ceiling is
 # the slow tier, so a hostile afternoon can never silence a watch entirely.
-INTERVAL_FLOOR = 45
+# The fastest we will ever poll a store. Lowered from 45s so that the worst
+# case — floor + jitter + tick — lands under a minute, which is the promise the
+# app is actually judged on. Safe to be this close only because the controller
+# below now backs off on a 429; the last time 45s was hardcoded without one, a
+# store rate-limited us into an auto-pause.
+INTERVAL_FLOOR = 35
 INTERVAL_CEILING = 900
 SPEEDUP_STEP = 15          # additive increase in rate, per clean check
 SLOWDOWN_FACTOR = 1.5      # multiplicative decrease on a 429

@@ -65,6 +65,19 @@ The window runs from the last sweep that actually **read** the catalogue, not
 the last check — after a three-day outage the latter is minutes old and would
 hide every release missed during it.
 
+Store timestamps go through `parse_instant`, never `parse`. `parse` truncates at
+19 characters for our own SQLite stamps, which throws away a timezone offset:
+Shopify serves `published_at` in the shop's own timezone, so a product listed
+this minute by a New York store read as four hours old, fell outside the window
+and was absorbed in silence. Permanently. Anything arriving from a store has to
+be normalised to UTC first.
+
+A conditional request is only sent when the catalogue fits in one page. An ETag
+validates page one, not the shop: with 333 products a new item can land on page
+two while page one is byte-identical, and a 304 would end the sweep before
+page two was ever fetched — while still advancing the window, so the item reads
+as old whenever it finally becomes visible.
+
 Keeping `published_at` and `created_at` apart is what makes a relist legible:
 Shopify resets the publish date when an item is unpublished and put back, so a
 years-old product returning looks brand new by that field alone. Collapsing the
@@ -93,7 +106,12 @@ ban risk to save about two minutes on a restock that usually sits for hours.
 |------|----------|-----|
 | slow | 15 min   | announcements, feeds |
 | base | 5 min    | default — restocks |
-| fast | 45 s     | only while armed for a known drop window |
+| fast | 35 s     | only while armed for a known drop window |
+
+Worst case from a product appearing to the phone buzzing is **50s**: 42s of
+poll gap (35s floor plus 20% jitter), 5s of scheduler granularity, and a few
+seconds of fetch and delivery. A test asserts that budget in seconds, so a
+future change to either number fails there rather than during a drop.
 
 The tier is a starting point, not a setting: each watch **learns** its own
 cadence. Every clean check earns a little speed (−15s); a 429 gives it back
