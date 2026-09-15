@@ -173,6 +173,11 @@ def _collection_item(base: str, product: dict) -> dict:
         # exactly what made an old sold-out item read as "listed 6m ago".
         "published_at": product.get("published_at"),
         "created_at": product.get("created_at"),
+        # Whether anything here can actually be bought right now. A "coming
+        # soon" listing is published, sits in the collection, and has no
+        # buyable variant — so this is the only field that separates a teaser
+        # from a drop.
+        "available": bool(offers),
     }
 
 

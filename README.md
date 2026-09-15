@@ -119,6 +119,41 @@ reads live config asserts a property of whoever ran it: it passed on a laptop
 with no `.env` and failed on the box, whose `.env` still pinned the old 15s —
 the promise above is not something a deployment setting gets to revoke quietly.
 
+### "Coming soon" is a drop that hasn't happened yet
+
+A brand publishes a product, puts it in the collection, and leaves every
+variant unbuyable for days. Detecting new *handles* is blind to what happens
+next: by the time the button goes live the catalogue has not grown, so there is
+nothing new to notice and the release passes in silence.
+
+So a collection watch tracks two different things. **Has the catalogue grown**
+answers "something appeared" — that is the 🆕 alert, and it fires for a
+coming-soon listing too, because knowing a drop is scheduled is worth knowing.
+**Can I buy it now** answers "the drop is happening" — that is the ⚡ *now
+buyable* alert, fired on a recorded unbuyable → buyable flip, and it is the one
+that arrives with a working cart link.
+
+Three rules keep it from crying wolf:
+
+- **A flip needs a recorded `false` to flip from.** "Available, and we have no
+  record" is not a launch. Otherwise the first sweep after this shipped would
+  have announced the entire catalogue.
+- **Absence is not unavailability.** A handle missing from a sweep is left
+  exactly as it was. A page cut short by a rate limit would otherwise record
+  the whole tail as unavailable and then announce a launch for every one of
+  them on the next full read — the same mistake as reading a 403 as sold out.
+- **One release is one alert.** Sizes sell out and come back all through a busy
+  drop; a launch is not repeated for the same product within an hour.
+
+### Why didn't this alert?
+
+Silence is ambiguous. A product that never alerted might be invisible to us,
+might have been absorbed as already-on-the-shelf, or might be sitting in the
+ledger waiting to become buyable — and from the outside those are identical.
+**Why no alert?** on the dashboard takes a product URL and says which one it
+is, and what would happen next. `GET /api/inspect?url=…` is the same answer as
+JSON.
+
 The tier is a starting point, not a setting: each watch **learns** its own
 cadence. Every clean check earns a little speed (−15s); a 429 gives it back
 multiplicatively, honouring `Retry-After` when the store sends one. Clamped to

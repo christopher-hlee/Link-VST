@@ -129,7 +129,14 @@ def render(watch: dict, kind: str, payload: dict) -> str:
             return "\n".join(lines)
 
         arrival = payload.get("arrival") or "new"
-        if arrival == "relisted":
+        if arrival == "launched":
+            # Not new to the catalogue — new to the checkout. This is the alert
+            # for a "coming soon" listing that has just gone buyable, which is
+            # the moment that actually matters and the one a handle diff can
+            # never see.
+            lines.append(f"<b>⚡ {n} now buyable at {_esc(brand or title)}</b>")
+            lines.append("Listed earlier, on sale as of now:")
+        elif arrival == "relisted":
             # Republished, not released. Shopify resets published_at when an
             # item comes back, so without saying this the alert would present a
             # years-old product as a fresh drop.
@@ -151,14 +158,16 @@ def render(watch: dict, kind: str, payload: dict) -> str:
         if n > 10:
             lines.append(f"· …and {n - 10} more")
         before = payload.get("baseline_count")
-        if before is not None:
+        if before is not None and arrival != "launched":
+            # A launch does not grow the catalogue — the product was already
+            # counted — so "333 → 334 products" would simply be false.
             lines.append("")
             lines.append(f"<code>{before} → {before + n} products</code>")
         # How far behind the store we were. Without this, "the alert was late"
         # can only be argued about; with it, the lag is a number you can read
         # off your phone.
         lag = payload.get("listed_ago_s")
-        if isinstance(lag, int):
+        if isinstance(lag, int) and arrival != "launched":
             # For a relist the timestamp is when it came BACK, not when it was
             # first sold. Saying "listed" there would restate the confusion
             # this whole change exists to clear up.

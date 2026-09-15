@@ -7,7 +7,7 @@ out". Conflating those is how monitors silently stop working while looking fine.
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .timeutil import parse_instant, utcnow
+from .timeutil import parse, parse_instant, stamp, utcnow
 
 # Stock states. `error` is deliberately NOT one of them — see module docstring.
 UNKNOWN = "unknown"
@@ -72,6 +72,9 @@ class Decision:
     failures: int
     events: list[Event] = field(default_factory=list)
     baseline: list[str] | None = None   # new handle baseline, collection watches
+    # Per-handle purchasability for a collection watch. None means "do not
+    # write" — a failed or unchanged check must never overwrite the ledger.
+    availability: dict | None = None
     price: float | None = None
     pause: bool = False                 # stop polling: too many failures in a row
     defer_seconds: float | None = None  # push the next poll out this far
@@ -87,6 +90,7 @@ def decide(
     result: CheckResult,
     failure_threshold: int = 5,
     window_start=None,
+    prev_availability: dict | None = None,
 ) -> Decision:
     """Fold a check result into a new persisted state plus any events to fire."""
     if result.rate_limited:
@@ -118,7 +122,8 @@ def decide(
 
     if kind == "collection":
         return _decide_collection(prev_state, prev_baseline, result, events,
-                                  window_start)
+                                  window_start=window_start,
+                                  prev_availability=prev_availability)
 
     return _decide_product(prev_state, prev_price, result, events)
 
@@ -176,13 +181,17 @@ def _decide_product(prev_state, prev_price, result, events) -> Decision:
 
 
 def _decide_collection(prev_state, prev_baseline, result, events,
-                       window_start=None) -> Decision:
+                       window_start=None, prev_availability=None) -> Decision:
     handles = list(result.handles or [])
+    items = (result.extra or {}).get("items") or {}
+    now = utcnow()
 
     # First successful check just records what's there.
     if prev_baseline is None:
         return Decision(state=WATCHING, failures=0, events=events,
-                        baseline=handles)
+                        baseline=handles,
+                        availability=_fold_availability(None, items, handles,
+                                                        alerted=(), now=now))
 
     known = set(prev_baseline)
     unseen = [h for h in handles if h not in known]
@@ -190,8 +199,6 @@ def _decide_collection(prev_state, prev_baseline, result, events,
     # The baseline is a dedupe ledger, not the trigger. Being absent from it
     # only means we have not seen the product; whether the STORE considers it
     # new is a separate question, and the only one worth alerting on.
-    items = (result.extra or {}).get("items") or {}
-    now = utcnow()
     start = window_start if window_start is not None else now
 
     buckets: dict[str, list[str]] = {}
@@ -218,10 +225,80 @@ def _decide_collection(prev_state, prev_baseline, result, events,
         events.append(Event(kind=NEW_PRODUCT, from_state=prev_state,
                             to_state=WATCHING, payload=payload))
 
+    # A product already in the ledger that has just become buyable. This is
+    # the moment a "coming soon" listing actually drops, and detecting new
+    # HANDLES alone is blind to it: the handle appeared weeks ago, so by the
+    # time the button goes live there is nothing new to notice. The handle
+    # test answers "has the catalogue grown"; this one answers "can I buy it
+    # now", and only the second is the question being asked.
+    launched = [h for h in handles
+                if h not in buckets.get(ARRIVAL_NEW, ())
+                and h not in buckets.get(ARRIVAL_RELISTED, ())
+                and h not in buckets.get(ARRIVAL_UNCONFIRMED, ())
+                and _became_buyable(prev_availability, items, h, now)]
+    if launched:
+        payload = {**_prune(_payload(result), launched),
+                   "handles": launched,
+                   "arrival": ARRIVAL_LAUNCHED,
+                   "baseline_count": len(known)}
+        events.append(Event(kind=NEW_PRODUCT, from_state=prev_state,
+                            to_state=WATCHING, payload=payload))
+
     # Union, so a product briefly dropping out of the feed doesn't re-alert
     # when it comes back.
     return Decision(state=WATCHING, failures=0, events=events,
-                    baseline=sorted(known | set(handles)))
+                    baseline=sorted(known | set(handles)),
+                    availability=_fold_availability(prev_availability, items,
+                                                    handles, alerted=launched,
+                                                    now=now))
+
+
+# How long before the same product may announce a launch again. A hot item
+# flaps in and out of stock all through a drop; without this, one release
+# becomes a dozen alerts, which is how a useful notification becomes one you
+# swipe away without reading.
+RELAUNCH_COOLDOWN_S = 3600
+
+
+def _became_buyable(prev_availability, items, handle, now) -> bool:
+    """True only for a recorded False -> True flip.
+
+    Deliberately not "is available and we have no record": on the first sweep
+    after this ledger was introduced every buyable product in the catalogue
+    would qualify, and a monitor whose first act is to alert on 300 things it
+    was already watching has taught you to ignore it.
+    """
+    if not (items.get(handle) or {}).get("available"):
+        return False
+    before = (prev_availability or {}).get(handle)
+    if not isinstance(before, dict) or before.get("available") is not False:
+        return False
+    last = parse(before.get("alerted_at"))
+    return last is None or (now - last).total_seconds() >= RELAUNCH_COOLDOWN_S
+
+
+def _fold_availability(prev, items, handles, *, alerted, now) -> dict:
+    """Carry the ledger forward, updating only what this sweep actually saw.
+
+    A handle missing from this read is left exactly as it was. Absence is not
+    evidence of anything — a page cut short by a rate limit would otherwise
+    record the entire tail of the catalogue as unavailable, and then announce
+    a launch for every one of them on the next full read.
+    """
+    ledger = dict(prev or {})
+    launched = set(alerted)
+    for handle in handles:
+        item = items.get(handle) or {}
+        before = ledger.get(handle)
+        before = before if isinstance(before, dict) else {}
+        entry = {"available": bool(item.get("available"))}
+        alerted_at = before.get("alerted_at")
+        if handle in launched:
+            alerted_at = stamp(now)
+        if alerted_at:
+            entry["alerted_at"] = alerted_at
+        ledger[handle] = entry
+    return ledger
 
 
 # How a product that is new *to us* relates to the store's own record of it.
@@ -229,6 +306,7 @@ ARRIVAL_NEW = "new"                # the store published it since we last looked
 ARRIVAL_RELISTED = "relisted"      # published since, but created long ago
 ARRIVAL_UNCONFIRMED = "unconfirmed"  # the store gave us no dates to judge by
 ARRIVAL_KNOWN = "known"            # already on the shelf; we simply hadn't seen it
+ARRIVAL_LAUNCHED = "launched"      # we already knew it; the store just made it buyable
 
 # A brand may stage a product days before a launch, so created_at being older
 # than published_at is normal and not evidence of a relist. Only a gap this

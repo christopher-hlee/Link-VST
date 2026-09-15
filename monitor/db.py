@@ -63,6 +63,11 @@ CREATE TABLE IF NOT EXISTS watches (
     -- the dashboard can offer one cart link per size without re-fetching.
     last_offers_json TEXT,
     baseline_json TEXT,
+    -- Per-handle purchasability from the last good sweep, so a product
+    -- that was listed as "coming soon" weeks ago can still announce the
+    -- moment it becomes buyable. The handle baseline cannot: by then the
+    -- catalogue has not grown, so there is nothing new to notice.
+    availability_json TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     last_error   TEXT,
     last_checked_at TEXT,
@@ -109,7 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_events_recent ON events(id DESC);
 # nothing to a table that already exists, so a live database never gains them
 # without this.
 _ADDED_COLUMNS = {
-    "watches": {"last_sweep_at": "TEXT"},
+    "watches": {"last_sweep_at": "TEXT", "availability_json": "TEXT"},
 }
 
 
@@ -142,7 +147,8 @@ WATCH_WRITABLE = {
     "name", "brand", "url", "strategy", "kind", "target_ref", "store_ref", "size_pref",
     "base_interval_s", "hot_interval_s", "hot_until", "alert_level", "enabled",
     "etag", "last_modified", "last_state", "last_price", "last_title",
-    "last_image", "last_offers_json", "baseline_json", "consecutive_failures", "last_error",
+    "last_image", "last_offers_json", "baseline_json", "availability_json",
+    "consecutive_failures", "last_error",
     "last_checked_at", "last_sweep_at", "next_check_at", "last_alert_at",
 }
 
@@ -224,6 +230,23 @@ def get_baseline(watch: dict) -> list[str] | None:
         return json.loads(raw)
     except (ValueError, TypeError):
         return None
+
+
+def get_availability(watch: dict) -> dict:
+    """The per-handle purchasability ledger, or an empty one.
+
+    Empty is the safe reading: nothing flips from unavailable to available
+    without a recorded `False` to flip from, so a watch that has never written
+    this column adopts the catalogue in silence.
+    """
+    raw = watch.get("availability_json")
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 # ---------------------------------------------------------------- checks

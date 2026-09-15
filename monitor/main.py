@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from . import db, scheduler, security
 from .config import API_KEY, COOKIE_NAME
 from .fetcher import close_client
-from .routes import auth, detect, events, watches
+from .routes import auth, detect, events, inspect, watches
 
 logging.basicConfig(
     level=logging.INFO,
@@ -97,3 +97,4 @@ app.include_router(auth.router,    prefix="/api")
 app.include_router(watches.router, prefix="/api")
 app.include_router(events.router,  prefix="/api")
 app.include_router(detect.router,  prefix="/api")
+app.include_router(inspect.router, prefix="/api")

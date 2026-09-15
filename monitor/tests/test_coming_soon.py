@@ -1,0 +1,378 @@
+"""A "coming soon" listing is a drop that has not happened yet.
+
+Satisfy publishes a product, puts it in shop-all, and leaves it unbuyable for
+days. Detecting new HANDLES is blind to what happens next: by the time the
+button goes live the catalogue has not grown, so there is nothing new to
+notice and the release passes in silence. These tests are about the second
+question — "can I buy it now" — which is the one actually being asked.
+"""
+import json
+from datetime import timedelta
+
+import httpx
+import pytest
+import respx
+
+from monitor import db, scheduler
+from monitor.statemachine import (
+    ARRIVAL_LAUNCHED, ARRIVAL_NEW, RELAUNCH_COOLDOWN_S,
+)
+from monitor.timeutil import stamp, utcnow
+
+STORE = "https://satisfyrunning.com"
+COLLECTION = f"{STORE}/collections/shop-all"
+FEED = f"{STORE}/collections/shop-all/products.json"
+
+
+def ago(**kw):
+    return (utcnow() - timedelta(**kw)).isoformat()
+
+
+def product(handle, *, buyable, published=None, created=None):
+    """A Shopify catalogue entry. A coming-soon item is published and in the
+    collection; every variant simply has available=false."""
+    published = published or ago(days=9)
+    return {"handle": handle, "title": handle.replace("-", " ").title(),
+            "published_at": published, "created_at": created or published,
+            "variants": [{"id": abs(hash(handle)) % 10000, "title": "M",
+                          "available": buyable, "price": "295.00"}]}
+
+
+def feed(*products):
+    return httpx.Response(200, json={"products": list(products)})
+
+
+@pytest.fixture
+def sent(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    db.init_db()
+    calls = []
+
+    async def fake_send(watch, kind, payload):
+        calls.append({"kind": kind, "payload": payload})
+
+    monkeypatch.setattr("monitor.notify.telegram.send_event", fake_send)
+    monkeypatch.setattr("monitor.notify.telegram.configured", lambda: True)
+    return calls
+
+
+def watch_row(**kw):
+    fields = dict(name="satisfyrunning.com · shop-all", brand="satisfyrunning.com",
+                  url=COLLECTION, strategy="shopify", kind="collection",
+                  target_ref="shop-all", base_interval_s=300,
+                  last_state="watching", last_sweep_at=stamp())
+    fields.update(kw)
+    return db.create_watch(**fields)
+
+
+async def sweep(wid):
+    await scheduler.check_watch(db.get_watch(wid))
+
+
+# --- the case in hand ------------------------------------------------------
+
+@respx.mock
+async def test_a_coming_soon_listing_alerts_when_it_becomes_buyable(sent):
+    """The whole point. Two sweeps: the product is unbuyable, then it is not."""
+    wid = watch_row(baseline_json=json.dumps(["shell-jacket", "coming-soon-tee"]),
+                    availability_json=json.dumps({
+                        "shell-jacket": {"available": True},
+                        "coming-soon-tee": {"available": False}}))
+    route = respx.get(url__startswith=FEED)
+    route.mock(return_value=feed(product("shell-jacket", buyable=True),
+                                 product("coming-soon-tee", buyable=True)))
+
+    await sweep(wid)
+
+    assert [c["kind"] for c in sent] == ["new_product"]
+    assert sent[0]["payload"]["arrival"] == ARRIVAL_LAUNCHED
+    assert sent[0]["payload"]["handles"] == ["coming-soon-tee"]
+
+
+@respx.mock
+async def test_a_listing_that_is_still_coming_soon_stays_silent(sent):
+    wid = watch_row(baseline_json=json.dumps(["coming-soon-tee"]),
+                    availability_json=json.dumps(
+                        {"coming-soon-tee": {"available": False}}))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("coming-soon-tee", buyable=False)))
+
+    await sweep(wid)
+
+    assert sent == [], "an unbuyable listing has not dropped"
+
+
+@respx.mock
+async def test_a_new_coming_soon_listing_still_announces_itself(sent):
+    """Appearing is worth knowing about even though you cannot buy it yet —
+    it is how you learn a drop is coming. It just is not a launch."""
+    wid = watch_row(baseline_json=json.dumps(["shell-jacket"]),
+                    availability_json=json.dumps(
+                        {"shell-jacket": {"available": True}}))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("shell-jacket", buyable=True),
+                          product("teaser", buyable=False, published=ago(minutes=3))))
+
+    await sweep(wid)
+
+    assert [c["payload"]["arrival"] for c in sent] == [ARRIVAL_NEW]
+    assert sent[0]["payload"]["handles"] == ["teaser"]
+
+
+@respx.mock
+async def test_appearing_and_launching_are_not_one_alert_twice(sent):
+    """A product that arrives already buyable gets the 'new' alert and must
+    not also be reported as a launch in the same breath."""
+    wid = watch_row(baseline_json=json.dumps(["shell-jacket"]),
+                    availability_json=json.dumps(
+                        {"shell-jacket": {"available": True}}))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("shell-jacket", buyable=True),
+                          product("drop", buyable=True, published=ago(minutes=2))))
+
+    await sweep(wid)
+
+    assert len(sent) == 1
+    assert sent[0]["payload"]["arrival"] == ARRIVAL_NEW
+
+
+# --- adopting a catalogue must be silent -----------------------------------
+
+@respx.mock
+async def test_the_first_sweep_after_this_ships_does_not_alert_on_everything(sent):
+    """The upgrade case. An existing watch has a full baseline and no ledger;
+    if 'available with nothing recorded' counted as a flip, the first sweep
+    after the deploy would announce the entire catalogue."""
+    handles = [f"p{i}" for i in range(40)]
+    wid = watch_row(baseline_json=json.dumps(handles), availability_json=None)
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(*[product(h, buyable=True) for h in handles]))
+
+    await sweep(wid)
+
+    assert sent == [], "adopting a ledger is not forty launches"
+    ledger = json.loads(db.get_watch(wid)["availability_json"])
+    assert len(ledger) == 40 and all(v["available"] for v in ledger.values())
+
+
+@respx.mock
+async def test_the_very_first_sweep_of_a_new_watch_records_the_ledger(sent):
+    wid = watch_row(baseline_json=None, availability_json=None)
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("a", buyable=True),
+                          product("b", buyable=False)))
+
+    await sweep(wid)
+
+    assert sent == []
+    ledger = json.loads(db.get_watch(wid)["availability_json"])
+    assert ledger["a"]["available"] is True
+    assert ledger["b"]["available"] is False
+
+
+# --- absence is not evidence ----------------------------------------------
+
+@respx.mock
+async def test_a_short_read_does_not_mark_the_missing_tail_unavailable(sent):
+    """A page cut short by a rate limit shows fewer products. Recording the
+    absent ones as unavailable would fire a launch for every one of them on
+    the next full read — the same class of bug as treating a 403 as sold out."""
+    wid = watch_row(baseline_json=json.dumps(["a", "b", "c"]),
+                    availability_json=json.dumps({
+                        "a": {"available": True}, "b": {"available": True},
+                        "c": {"available": True}}))
+    route = respx.get(url__startswith=FEED)
+
+    route.mock(return_value=feed(product("a", buyable=True)))
+    await sweep(wid)
+    ledger = json.loads(db.get_watch(wid)["availability_json"])
+    assert ledger["b"]["available"] is True, "b was not seen, not seen-as-gone"
+
+    route.mock(return_value=feed(product("a", buyable=True),
+                                 product("b", buyable=True),
+                                 product("c", buyable=True)))
+    await sweep(wid)
+
+    assert sent == [], "nothing launched; the tail was simply out of view"
+
+
+@respx.mock
+async def test_a_failed_check_leaves_the_ledger_alone(sent):
+    wid = watch_row(baseline_json=json.dumps(["a"]),
+                    availability_json=json.dumps({"a": {"available": False}}))
+    respx.get(url__startswith=FEED).mock(return_value=httpx.Response(500))
+    respx.get(url__startswith=f"{STORE}/collections/shop-all.atom").mock(
+        return_value=httpx.Response(500))
+
+    await sweep(wid)
+
+    assert json.loads(db.get_watch(wid)["availability_json"]) == {
+        "a": {"available": False}}
+
+
+# --- a drop makes a hot item flap -----------------------------------------
+
+@respx.mock
+async def test_one_release_is_one_alert_however_much_the_stock_flaps(sent):
+    """Sizes sell out and are restocked all through a busy drop. Each flip is
+    real, but twelve notifications for one release is a notification you learn
+    to swipe away."""
+    wid = watch_row(baseline_json=json.dumps(["hot"]),
+                    availability_json=json.dumps({"hot": {"available": False}}))
+    route = respx.get(url__startswith=FEED)
+
+    for buyable in [True, False, True, False, True, True]:
+        route.mock(return_value=feed(product("hot", buyable=buyable)))
+        await sweep(wid)
+
+    assert len(sent) == 1, f"{len(sent)} alerts for one release"
+
+
+@respx.mock
+async def test_a_genuine_restock_the_next_day_does_alert(sent):
+    """The cooldown must not become a permanent mute."""
+    wid = watch_row(baseline_json=json.dumps(["hot"]),
+                    availability_json=json.dumps({"hot": {"available": False}}))
+    route = respx.get(url__startswith=FEED)
+
+    route.mock(return_value=feed(product("hot", buyable=True)))
+    await sweep(wid)
+    route.mock(return_value=feed(product("hot", buyable=False)))
+    await sweep(wid)
+
+    # Age the recorded alert past the cooldown, as a day passing would.
+    ledger = json.loads(db.get_watch(wid)["availability_json"])
+    ledger["hot"]["alerted_at"] = stamp(
+        utcnow() - timedelta(seconds=RELAUNCH_COOLDOWN_S + 60))
+    db.update_watch(wid, availability_json=json.dumps(ledger))
+
+    route.mock(return_value=feed(product("hot", buyable=True)))
+    await sweep(wid)
+
+    assert len(sent) == 2
+
+
+# --- what the alert says ---------------------------------------------------
+
+def test_the_launch_alert_does_not_claim_the_catalogue_grew():
+    from monitor.notify import telegram
+
+    body = telegram.render(
+        {"name": "Satisfy", "brand": "satisfyrunning.com"}, "new_product",
+        {"handles": ["a"], "titles": {"a": "Coming Soon Tee"},
+         "baseline_count": 333, "arrival": "launched"})
+
+    assert "now buyable" in body
+    assert "333 → 334" not in body, "the product was already counted"
+    assert "Just listed" not in body
+
+
+def test_the_launch_alert_does_not_report_a_lag_it_would_misread():
+    """published_at is when the teaser went up, days before the button did.
+    Reporting it as detection lag would claim we were a week late."""
+    from monitor.notify import telegram
+
+    body = telegram.render(
+        {"name": "Satisfy", "brand": "satisfyrunning.com"}, "new_product",
+        {"handles": ["a"], "titles": {"a": "Tee"}, "arrival": "launched",
+         "listed_ago_s": 9 * 86400})
+
+    assert "before this alert" not in body
+
+
+@respx.mock
+async def test_the_launch_alert_carries_a_cart_link(sent):
+    """The reason this alert is worth sending at all: by definition the
+    product is buyable the moment it fires, so the button works."""
+    wid = watch_row(baseline_json=json.dumps(["tee"]),
+                    availability_json=json.dumps({"tee": {"available": False}}))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("tee", buyable=True)))
+
+    await sweep(wid)
+
+    items = sent[0]["payload"]["items"]["tee"]
+    assert items["offers"], "a launch with no cart link is just a notification"
+    assert "/cart/" in items["offers"][0]["cart_url"]
+
+
+# --- asking the monitor what it sees ---------------------------------------
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    db.init_db()
+    monkeypatch.setattr("monitor.config.API_KEY", "k")
+    monkeypatch.setattr("monitor.main.API_KEY", "k")
+    from monitor.main import app
+    with TestClient(app) as c:
+        c.headers.update({"Authorization": "Bearer k"})
+        yield c
+
+
+def product_json(handle, *, buyable, published=None):
+    return httpx.Response(200, json={"product": product(
+        handle, buyable=buyable, published=published)})
+
+
+@respx.mock
+def test_inspect_explains_a_coming_soon_listing(client):
+    """The question that prompted all this: why was there no alert?"""
+    watch_row(baseline_json=json.dumps(["coming-soon-tee"]),
+              availability_json=json.dumps(
+                  {"coming-soon-tee": {"available": False}}))
+    respx.get(f"{STORE}/products/coming-soon-tee.json").mock(
+        return_value=product_json("coming-soon-tee", buyable=False))
+
+    r = client.get("/api/inspect",
+                   params={"url": f"{STORE}/products/coming-soon-tee"})
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["buyable_now"] is False
+    assert body["watches"][0]["in_catalogue"] is True
+    assert "not buyable" in body["watches"][0]["verdict"]
+
+
+@respx.mock
+def test_inspect_says_when_nothing_is_watching_the_store(client):
+    respx.get("https://othershop.com/products/x.json").mock(
+        return_value=product_json("x", buyable=True))
+
+    r = client.get("/api/inspect",
+                   params={"url": "https://othershop.com/products/x"})
+
+    assert r.status_code == 200, r.text
+    assert "No collection watch covers" in r.json()["note"]
+
+
+@respx.mock
+def test_inspect_reports_a_pending_launch(client):
+    """Buyable at the store, last recorded unbuyable: an alert is due."""
+    watch_row(baseline_json=json.dumps(["tee"]),
+              availability_json=json.dumps({"tee": {"available": False}}))
+    respx.get(f"{STORE}/products/tee.json").mock(
+        return_value=product_json("tee", buyable=True))
+
+    r = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"})
+
+    assert "the next sweep alerts" in r.json()["watches"][0]["verdict"]
+
+
+def test_inspect_refuses_a_url_that_is_not_a_product(client):
+    r = client.get("/api/inspect", params={"url": f"{STORE}/collections/shop-all"})
+    assert r.status_code == 422
+
+
+@respx.mock
+def test_inspect_does_not_invent_data_when_the_store_refuses(client):
+    """An unreadable page must not come back looking like an answer."""
+    respx.get(f"{STORE}/products/ghost.json").mock(
+        return_value=httpx.Response(404))
+
+    r = client.get("/api/inspect", params={"url": f"{STORE}/products/ghost"})
+
+    assert r.status_code == 502
+    assert "unpublished" in r.json()["detail"]

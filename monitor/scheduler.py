@@ -83,6 +83,7 @@ async def check_watch(watch: dict) -> bool:
         result=result,
         failure_threshold=FAILURE_ALERT_THRESHOLD,
         window_start=_sweep_window(watch),
+        prev_availability=db.get_availability(watch),
     )
 
     interval = next_interval(
@@ -134,6 +135,8 @@ async def check_watch(watch: dict) -> bool:
     }
     if decision.baseline is not None:
         updates["baseline_json"] = json.dumps(decision.baseline)
+    if decision.availability is not None:
+        updates["availability_json"] = json.dumps(decision.availability)
     # Only a sweep that actually READ the catalogue moves this, which is why it
     # is gated on result.ok rather than on the baseline: a failed check carries
     # the previous baseline through unchanged, so keying off that would stamp a

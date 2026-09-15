@@ -107,6 +107,7 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   text-transform:uppercase;color:var(--dim);margin-bottom:3px}
 .fired .tag{margin-left:9px;padding:1px 6px;border:1px solid var(--dim);color:var(--held);
   letter-spacing:.14em}
+.fired .tag.now{border-color:var(--accent);color:var(--accent)}
 .fired .fp{font-family:var(--serif);font-size:15px;color:var(--muted)}
 .fired .ft{font-size:11px;color:var(--faint)}
 /* Detection lag. Amber past five minutes, because that is the point at which
@@ -576,6 +577,11 @@ function dropRow(it, e, announce) {
     ? '<span class="tag">relisted</span>'
     : arrival === 'unconfirmed'
     ? '<span class="tag" title="The store gave no listing date, so this may not be new">unverified</span>'
+    : arrival === 'launched'
+    /* Listed for a while, buyable as of now — a coming-soon item going live.
+       Marked distinctly because the catalogue did not grow: nothing here is
+       new, the checkout just opened. */
+    ? '<span class="tag now" title="Already listed; the store just made it buyable">now buyable</span>'
     : '';
   return `<div class="fired">
     <span class="fi">
@@ -658,7 +664,8 @@ function render() {
      ${news.length ? `<span>${news.length} to read</span>` : ''}
      <span>${held.length} held</span>
      <span style="color:var(--failing)">${broken.length} broken</span>
-     <button class="btn-ghost" onclick="openAdd()">Add a watch</button>`;
+     <button class="btn-ghost" onclick="openAdd()">Add a watch</button>
+     <button class="btn-ghost" onclick="openInspect()">Why no alert?</button>`;
 
   const clearBtn = ids => `<button class="btn-text" style="color:var(--dim);margin-left:14px"
       onclick="dismissAll([${ids}])">Clear</button>`;
@@ -931,6 +938,57 @@ function openAdd() {
   $('aUrl').addEventListener('input', () => { $('detect').innerHTML = ''; });
   $('aUrl').focus();
 }
+/* Silence is ambiguous: a product that never alerted might be invisible to us,
+   might have been absorbed as already-on-the-shelf, or might be sitting in the
+   ledger waiting to become buyable. From the outside those look identical, so
+   this asks the server which one it is. */
+function openInspect() {
+  $('add').innerHTML = `<div class="sheet">
+    <h2>Why didn't this alert?</h2>
+    <p class="sub">Paste a product URL. I'll tell you what the monitor can see,
+      and what it would do about it.</p>
+    <div class="field">
+      <label>Product url</label>
+      <input type="url" id="iUrl" placeholder="https://www.satisfyrunning.com/products/...">
+    </div>
+    <div id="iOut"></div>
+    <div class="sheet-actions">
+      <button class="btn" onclick="runInspect()">Look</button>
+      <button class="btn-text" onclick="closeSheet()">Close</button>
+    </div>
+  </div>`;
+  $('add').classList.remove('hide');
+  $('iUrl').focus();
+  $('iUrl').addEventListener('keydown', e => { if (e.key === 'Enter') runInspect(); });
+}
+
+async function runInspect() {
+  const url = ($('iUrl').value || '').trim();
+  if (!url) return;
+  $('iOut').innerHTML = '<p class="sub">Asking the store…</p>';
+  let d;
+  try {
+    d = await api('/inspect?url=' + encodeURIComponent(url));
+  } catch (err) {
+    $('iOut').innerHTML = `<div class="warn">${esc(err.message || 'That did not work.')}</div>`;
+    return;
+  }
+  const when = t => t ? new Date(t.replace(' ', 'T') + 'Z').toLocaleString() : '—';
+  const rows = (d.watches || []).map(w => `
+    <div class="fired">
+      <span class="fi">
+        <span class="k">${esc(w.name)}</span>
+        ${esc(w.verdict)}
+      </span>
+      <span class="ft">swept ${esc(when(w.last_sweep_at))}</span>
+    </div>`).join('');
+  $('iOut').innerHTML = `
+    <p class="sub"><b>${esc(d.title || d.handle)}</b><br>
+      ${d.buyable_now ? 'Buyable now' : 'Not buyable — no variant on sale'}
+      · listed ${esc(when(d.published_at))}</p>
+    ${rows || `<div class="warn">${esc(d.note || 'Nothing is watching this store.')}</div>`}`;
+}
+
 const closeSheet = () => $('add').classList.add('hide');
 
 function pickIntent(id) {
