@@ -442,3 +442,62 @@ def test_inspect_does_not_guess_when_the_feed_will_not_load(client):
     w = r.json()["watches"][0]
     assert w["in_feed"] is None
     assert "cannot say" in w["verdict"]
+
+
+# --- one store, two spellings ----------------------------------------------
+
+@pytest.mark.parametrize("watch_url,asked", [
+    ("https://www.satisfyrunning.com", "https://satisfyrunning.com"),
+    ("https://satisfyrunning.com", "https://www.satisfyrunning.com"),
+    ("https://www.satisfyrunning.com/collections/shop-all",
+     "https://www.satisfyrunning.com"),
+])
+@respx.mock
+def test_www_is_not_a_different_store(client, watch_url, asked):
+    """Reported from the dashboard: a watch added as www.satisfyrunning.com
+    answered "nothing is polling this store" about a store it polls every 35
+    seconds, because the origins were compared verbatim."""
+    watch_row(url=watch_url, target_ref=None, baseline_json=json.dumps(["tee"]))
+    respx.get(url__regex=r".*/products/tee\.json").mock(
+        return_value=product_json("tee", buyable=True))
+    respx.get(url__regex=r".*/products\.json.*").mock(
+        return_value=feed(product("tee", buyable=True)))
+
+    r = client.get("/api/inspect", params={"url": f"{asked}/products/tee"})
+
+    body = r.json()
+    assert body["watches"], f"{watch_url} should cover {asked}"
+    assert "note" not in body
+
+
+@respx.mock
+def test_a_genuinely_different_store_is_still_not_covered(client):
+    watch_row(url="https://www.satisfyrunning.com", target_ref=None)
+    respx.get(url__regex=r".*/products/x\.json").mock(
+        return_value=product_json("x", buyable=True))
+
+    r = client.get("/api/inspect", params={"url": "https://othershop.com/products/x"})
+
+    assert r.json()["watches"] == []
+    assert "No collection watch covers" in r.json()["note"]
+
+
+@respx.mock
+def test_inspect_returns_a_timestamp_the_page_can_read(client):
+    """"listed invalid Date" on the dashboard: the store's published_at carries
+    a timezone offset, and the page appends Z to what it is given."""
+    watch_row(baseline_json=json.dumps(["tee"]))
+    respx.get(f"{STORE}/products/tee.json").mock(return_value=httpx.Response(
+        200, json={"product": {
+            "handle": "tee", "title": "Tee",
+            "published_at": "2026-09-16T22:36:47-04:00",
+            "created_at": "2026-09-16T22:36:47-04:00",
+            "variants": [{"id": 1, "title": "M", "available": True,
+                          "price": "295.00"}]}}))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("tee", buyable=True)))
+
+    body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
+
+    assert body["published_at"] == "2026-09-17 02:36:47", "normalised to UTC"
+    assert body["published_at_raw"] == "2026-09-16T22:36:47-04:00"

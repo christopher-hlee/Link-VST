@@ -16,9 +16,23 @@ from ..statemachine import (
 from ..strategies import shopify
 from ..strategies.shopify import _collection_item, origin
 from ..fetcher import fetch
-from ..timeutil import parse, utcnow
+from ..timeutil import parse, parse_instant, stamp, utcnow
 
 router = APIRouter()
+
+
+def _same_store(a: str, b: str) -> bool:
+    """Whether two URLs name the same shop.
+
+    `www.satisfyrunning.com` and `satisfyrunning.com` are one store serving one
+    catalogue, but comparing origins verbatim calls them different — so a watch
+    added with the www form reports as not covering a product URL without it,
+    and the answer reads "nothing is polling this store" about a store being
+    polled every 35 seconds.
+    """
+    def host(url: str) -> str:
+        return urlparse(url).netloc.lower().removeprefix("www.")
+    return host(a) == host(b) and bool(host(a))
 
 
 def _handle(url: str) -> str | None:
@@ -56,13 +70,19 @@ async def inspect(url: str = Query(..., min_length=8)):
     # Which of our watches, if any, would ever see this product.
     covering = [w for w in db.list_watches()
                 if (w.get("kind") == "collection")
-                and origin(w["url"]).rstrip("/") == base.rstrip("/")]
+                and _same_store(w["url"], url)]
 
     report = {
         "handle": handle,
         "title": item["title"],
-        "published_at": item["published_at"],
-        "created_at": item["created_at"],
+        # Normalised to our own stamp format. The raw value carries the shop's
+        # timezone offset, which is right for the state machine and wrong for
+        # anything that assumes UTC.
+        "published_at": stamp(parse_instant(item["published_at"]))
+                        if item["published_at"] else None,
+        "published_at_raw": item["published_at"],
+        "created_at": stamp(parse_instant(item["created_at"]))
+                      if item["created_at"] else None,
         "buyable_now": item["available"],
         "offers": len(item["offers"]),
         "watches": [],

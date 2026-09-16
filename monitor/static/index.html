@@ -283,7 +283,7 @@ function derive(w) {
   if (w.paused) return 'paused';
   return w.last_state || 'unknown';
 }
-const isArmed = w => w.hot_until && new Date(w.hot_until.replace(' ', 'T') + 'Z') > new Date();
+const isArmed = w => w.hot_until && asDate(w.hot_until) > new Date();
 /* A rate-limited watch is healthy and deliberately polling less. It keeps its
    state, so without this it would look completely normal and the reason for the
    slower cadence would be invisible. */
@@ -304,9 +304,24 @@ function shortName(w) {
 }
 const realSizes = w => (w.available_sizes || []).filter(s => s && !/^default/i.test(s));
 
+/* Two kinds of timestamp reach this page and they are NOT interchangeable.
+   Ours are bare UTC out of SQLite ("2026-09-16 10:00:00") and need a Z; a
+   store's carry their own offset ("2026-09-16T22:36:47-04:00"), and appending
+   Z to one of those yields Invalid Date. Same distinction as parse vs
+   parse_instant on the server, and the same four hours of silence if it is
+   got wrong — so there is one function and it handles both. */
+const asDate = ts => {
+  if (!ts) return null;
+  const s = String(ts).trim();
+  const absolute = /([zZ]|[+-]\d{2}:?\d{2})$/.test(s);
+  const d = new Date(absolute ? s : s.replace(' ', 'T') + 'Z');
+  return isNaN(d.getTime()) ? null : d;
+};
+
 function ago(ts) {
-  if (!ts) return 'never';
-  const s = (Date.now() - new Date(ts.replace(' ', 'T') + 'Z')) / 1000;
+  const at = asDate(ts);
+  if (!at) return 'never';
+  const s = (Date.now() - at) / 1000;
   if (s < 60) return Math.max(0, Math.round(s)) + 's ago';
   if (s < 3600) return Math.round(s / 60) + 'm ago';
   if (s < 86400) return Math.round(s / 3600) + 'h ago';
@@ -517,7 +532,7 @@ async function clearFeed() {
   toast('Alert history cleared.', 'good');
 }
 
-const when = ts => new Date(String(ts).replace(' ', 'T') + 'Z');
+const when = ts => asDate(ts);
 const evName = e => e.watch_brand || e.watch_name || 'a watch';
 
 /* Whether an event is news or merchandise is a property of the WATCH, not of
@@ -973,7 +988,10 @@ async function runInspect() {
     $('iOut').innerHTML = `<div class="warn">${esc(err.message || 'That did not work.')}</div>`;
     return;
   }
-  const when = t => t ? new Date(t.replace(' ', 'T') + 'Z').toLocaleString() : '—';
+  const when = t => {
+    const d = asDate(t);
+    return d ? d.toLocaleString() : (t ? String(t) : '—');
+  };
   const rows = (d.watches || []).map(w => `
     <div class="fired">
       <span class="fi">
