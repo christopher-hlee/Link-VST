@@ -144,6 +144,11 @@ def _collection_item(base: str, product: dict) -> dict:
     # products.json has no `available` on some themes; treat a missing flag as
     # available rather than silently dropping every cart link.
     live = [v for v in variants if v.get("available", True) and v.get("id")]
+    # ...but record whether the store actually SAID so. The permissive default
+    # is right for building cart links and wrong for claiming a product can be
+    # bought: a diagnostic that reports an absent flag as "buyable now" is
+    # inventing the one fact it was asked to check.
+    stated = any(v.get("available") is not None for v in variants if v.get("id"))
     offers = [
         {
             "id": v.get("id"),
@@ -178,6 +183,7 @@ def _collection_item(base: str, product: dict) -> dict:
         # buyable variant — so this is the only field that separates a teaser
         # from a drop.
         "available": bool(offers),
+        "available_stated": stated,
     }
 
 

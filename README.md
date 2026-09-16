@@ -157,6 +157,17 @@ because "not in our baseline" means either *not swept yet* or *this collection
 will never contain it* — and only the second is a reason to watch something
 else.
 
+It reports three sources separately — the catalogue feed we poll, the product
+API, and the product page's schema.org — and **never fills in one that said
+nothing**. An early version read availability from an endpoint that does not
+carry the flag, and a default meant for building cart links turned that silence
+into "buyable now" about a product the storefront was showing as Coming Soon.
+Silence is now reported as silence. When the page and the catalogue disagree,
+the panel says so outright: the storefront is what a person sees, so a page
+saying *not purchasable* over an API saying *buyable* means the store signals
+"coming soon" somewhere other than the variant flag we watch — which is
+something to be told, not something to resolve quietly in the API's favour.
+
 ### Watch the store, not the collections
 
 If a brand adds a drop to `/collections/new-arrivals` but not to `shop-all`,

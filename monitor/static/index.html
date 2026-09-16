@@ -1001,10 +1001,36 @@ async function runInspect() {
       </span>
       <span class="ft">swept ${esc(when(w.last_sweep_at))}</span>
     </div>`).join('');
+  /* Three sources, each reported as what it said — including when it said
+     nothing. Collapsing them into one word is what produced "Buyable now"
+     about a product the storefront was showing as Coming Soon. */
+  const says = v => v === true ? 'buyable'
+              : v === false ? 'not buyable'
+              : 'did not say';
+  const src = d.sources || {};
+  const srcRow = (label, v, note) => `
+    <div class="fired">
+      <span class="fi"><span class="k">${esc(label)}</span>${esc(says(v))}</span>
+      <span class="ft">${esc(note || '')}</span>
+    </div>`;
+
   $('iOut').innerHTML = `
     <p class="sub"><b>${esc(d.title || d.handle)}</b><br>
-      ${d.buyable_now ? 'Buyable now' : 'Not buyable — no variant on sale'}
-      · listed ${esc(when(d.published_at))}</p>
+      ${d.buyable_now === null || d.buyable_now === undefined
+        ? 'Nothing we read stated whether it is buyable'
+        : (d.buyable_now ? 'The catalogue says buyable' : 'The catalogue says not buyable')}
+      ${d.published_at ? '· listed ' + esc(when(d.published_at)) : ''}</p>
+    ${d.disagreement ? `<div class="warn">${esc(d.disagreement)}</div>` : ''}
+    ${src.collection_feed ? srcRow('Catalogue feed · what we poll',
+        src.collection_feed.available,
+        src.collection_feed.in_feed === false ? 'product not in this feed' : '') : ''}
+    ${src.product_api ? srcRow('Product API',
+        src.product_api.available,
+        src.product_api.read === false ? 'could not read' : '') : ''}
+    ${src.product_page ? srcRow('Product page · what a person sees',
+        src.product_page.buyable,
+        (src.product_page.availability || []).join(', ')
+          || src.product_page.note || '') : ''}
     ${rows || ''}
     ${d.note ? `<div class="warn">${esc(d.note)}</div>` : ''}
     ${(!rows && !d.note) ? `<div class="warn">Nothing is watching this store.</div>` : ''}`;

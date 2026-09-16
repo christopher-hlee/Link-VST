@@ -313,8 +313,27 @@ def client(tmp_path, monkeypatch):
 
 
 def product_json(handle, *, buyable, published=None):
-    return httpx.Response(200, json={"product": product(
-        handle, buyable=buyable, published=published)})
+    """`/products/<handle>.js` — the endpoint that states availability."""
+    return httpx.Response(200, json={
+        "title": handle.replace("-", " ").title(),
+        "variants": [{"id": 1, "title": "M", "available": buyable,
+                      "price": 29500}]})
+
+
+def page_html(*, availability="https://schema.org/InStock"):
+    """A product page carrying schema.org, as a real storefront does."""
+    return httpx.Response(200, text=f"""<html><head>
+      <script type="application/ld+json">{{"@type":"Product",
+        "name":"Tee","offers":{{"@type":"Offer","price":"295.00",
+        "availability":"{availability}"}}}}</script></head><body></body></html>""",
+        headers={"content-type": "text/html"})
+
+
+def mock_product_sources(handle, *, buyable=True, availability="https://schema.org/InStock"):
+    respx.get(url__regex=rf".*/products/{handle}\.js$").mock(
+        return_value=product_json(handle, buyable=buyable))
+    respx.get(url__regex=rf".*/products/{handle}$").mock(
+        return_value=page_html(availability=availability))
 
 
 @respx.mock
@@ -323,8 +342,7 @@ def test_inspect_explains_a_coming_soon_listing(client):
     watch_row(baseline_json=json.dumps(["coming-soon-tee"]),
               availability_json=json.dumps(
                   {"coming-soon-tee": {"available": False}}))
-    respx.get(f"{STORE}/products/coming-soon-tee.json").mock(
-        return_value=product_json("coming-soon-tee", buyable=False))
+    mock_product_sources("coming-soon-tee", buyable=False)
     respx.get(url__startswith=FEED).mock(
         return_value=feed(product("coming-soon-tee", buyable=False)))
 
@@ -340,8 +358,7 @@ def test_inspect_explains_a_coming_soon_listing(client):
 
 @respx.mock
 def test_inspect_says_when_nothing_is_watching_the_store(client):
-    respx.get("https://othershop.com/products/x.json").mock(
-        return_value=product_json("x", buyable=True))
+    mock_product_sources("x", buyable=True)
 
     r = client.get("/api/inspect",
                    params={"url": "https://othershop.com/products/x"})
@@ -355,8 +372,7 @@ def test_inspect_reports_a_pending_launch(client):
     """Buyable at the store, last recorded unbuyable: an alert is due."""
     watch_row(baseline_json=json.dumps(["tee"]),
               availability_json=json.dumps({"tee": {"available": False}}))
-    respx.get(f"{STORE}/products/tee.json").mock(
-        return_value=product_json("tee", buyable=True))
+    mock_product_sources("tee", buyable=True)
     respx.get(url__startswith=FEED).mock(
         return_value=feed(product("tee", buyable=True)))
 
@@ -373,7 +389,7 @@ def test_inspect_refuses_a_url_that_is_not_a_product(client):
 @respx.mock
 def test_inspect_does_not_invent_data_when_the_store_refuses(client):
     """An unreadable page must not come back looking like an answer."""
-    respx.get(f"{STORE}/products/ghost.json").mock(
+    respx.get(url__regex=r".*/products/ghost(\.js)?$").mock(
         return_value=httpx.Response(404))
 
     r = client.get("/api/inspect", params={"url": f"{STORE}/products/ghost"})
@@ -393,8 +409,7 @@ def test_inspect_names_a_product_the_watched_collection_cannot_see(client):
     watch something else. So the answer comes from the feed, not the memory.
     """
     watch_row(baseline_json=json.dumps(["shell-jacket"]))
-    respx.get(f"{STORE}/products/secret-drop.json").mock(
-        return_value=product_json("secret-drop", buyable=False))
+    mock_product_sources("secret-drop", buyable=False)
     # shop-all does not carry it.
     respx.get(url__startswith=FEED).mock(
         return_value=feed(product("shell-jacket", buyable=True)))
@@ -412,8 +427,7 @@ def test_inspect_separates_not_swept_yet_from_not_covered(client):
     """In the feed but not in the baseline is a timing gap, not a blind spot,
     and must not push you into creating watches you do not need."""
     watch_row(baseline_json=json.dumps(["shell-jacket"]))
-    respx.get(f"{STORE}/products/brand-new.json").mock(
-        return_value=product_json("brand-new", buyable=True))
+    mock_product_sources("brand-new", buyable=True)
     respx.get(url__startswith=FEED).mock(
         return_value=feed(product("shell-jacket", buyable=True),
                           product("brand-new", buyable=True)))
@@ -431,8 +445,7 @@ def test_inspect_does_not_guess_when_the_feed_will_not_load(client):
     """An unreadable feed is not evidence that the collection lacks the
     product — saying so would send you off creating watches for nothing."""
     watch_row(baseline_json=json.dumps(["shell-jacket"]))
-    respx.get(f"{STORE}/products/x.json").mock(
-        return_value=product_json("x", buyable=True))
+    mock_product_sources("x", buyable=True)
     respx.get(url__startswith=FEED).mock(return_value=httpx.Response(503))
     respx.get(url__startswith=f"{STORE}/collections/shop-all.atom").mock(
         return_value=httpx.Response(503))
@@ -458,8 +471,7 @@ def test_www_is_not_a_different_store(client, watch_url, asked):
     answered "nothing is polling this store" about a store it polls every 35
     seconds, because the origins were compared verbatim."""
     watch_row(url=watch_url, target_ref=None, baseline_json=json.dumps(["tee"]))
-    respx.get(url__regex=r".*/products/tee\.json").mock(
-        return_value=product_json("tee", buyable=True))
+    mock_product_sources("tee", buyable=True)
     respx.get(url__regex=r".*/products\.json.*").mock(
         return_value=feed(product("tee", buyable=True)))
 
@@ -473,8 +485,7 @@ def test_www_is_not_a_different_store(client, watch_url, asked):
 @respx.mock
 def test_a_genuinely_different_store_is_still_not_covered(client):
     watch_row(url="https://www.satisfyrunning.com", target_ref=None)
-    respx.get(url__regex=r".*/products/x\.json").mock(
-        return_value=product_json("x", buyable=True))
+    mock_product_sources("x", buyable=True)
 
     r = client.get("/api/inspect", params={"url": "https://othershop.com/products/x"})
 
@@ -487,17 +498,96 @@ def test_inspect_returns_a_timestamp_the_page_can_read(client):
     """"listed invalid Date" on the dashboard: the store's published_at carries
     a timezone offset, and the page appends Z to what it is given."""
     watch_row(baseline_json=json.dumps(["tee"]))
-    respx.get(f"{STORE}/products/tee.json").mock(return_value=httpx.Response(
-        200, json={"product": {
-            "handle": "tee", "title": "Tee",
-            "published_at": "2026-09-16T22:36:47-04:00",
-            "created_at": "2026-09-16T22:36:47-04:00",
-            "variants": [{"id": 1, "title": "M", "available": True,
-                          "price": "295.00"}]}}))
+    mock_product_sources("tee", buyable=True)
+    respx.get(url__startswith=FEED).mock(return_value=feed(
+        product("tee", buyable=True, published="2026-09-16T22:36:47-04:00")))
+
+    body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
+
+    assert body["published_at"] == "2026-09-17 02:36:47", "normalised to UTC"
+
+
+# --- never invent the fact you were asked to check -------------------------
+
+@respx.mock
+def test_a_silent_source_is_reported_as_silent_not_as_buyable(client):
+    """The bug behind "Buyable now" on a page showing Coming Soon.
+
+    Inspect read a product endpoint that does not carry `available`, and the
+    permissive default meant for building cart links turned that silence into
+    a claim. A diagnostic that invents the one fact it was asked to check is
+    worse than no diagnostic, because it gets believed.
+    """
+    watch_row(baseline_json=json.dumps(["tee"]),
+              availability_json=json.dumps({"tee": {"available": False}}))
+    # A feed whose variants state nothing at all.
+    respx.get(url__regex=r".*/products/tee\.js$").mock(return_value=httpx.Response(
+        200, json={"title": "Tee", "variants": [{"id": 1, "title": "M",
+                                                 "price": 29500}]}))
+    respx.get(url__regex=r".*/products/tee$").mock(return_value=page_html())
+    respx.get(url__startswith=FEED).mock(return_value=httpx.Response(
+        200, json={"products": [{"handle": "tee", "title": "Tee",
+                                 "published_at": ago(days=9), "created_at": ago(days=9),
+                                 "variants": [{"id": 1, "title": "M",
+                                               "price": "295.00"}]}]}))
+
+    body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
+
+    assert body["buyable_now"] is None, "silence is not a yes"
+    assert "cannot tell you whether it is buyable" in body["watches"][0]["verdict"]
+    assert "the next sweep alerts" not in body["watches"][0]["verdict"]
+
+
+@respx.mock
+def test_a_coming_soon_page_contradicting_the_api_is_called_out(client):
+    """A storefront showing Coming Soon while the catalogue says buyable means
+    the store signals it somewhere other than the variant flag — which is a
+    thing to be told, not a thing to quietly resolve in the API's favour."""
+    watch_row(baseline_json=json.dumps(["rippy-shorts"]),
+              availability_json=json.dumps({"rippy-shorts": {"available": False}}))
+    respx.get(url__regex=r".*/products/rippy-shorts\.js$").mock(
+        return_value=product_json("rippy-shorts", buyable=True))
+    respx.get(url__regex=r".*/products/rippy-shorts$").mock(
+        return_value=page_html(availability="https://schema.org/OutOfStock"))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("rippy-shorts", buyable=True)))
+
+    body = client.get("/api/inspect",
+                      params={"url": f"{STORE}/products/rippy-shorts"}).json()
+
+    assert body["buyable_now"] is True
+    assert body["sources"]["product_page"]["buyable"] is False
+    assert "treat this as not yet dropped" in body["disagreement"]
+
+
+@respx.mock
+def test_a_page_with_no_availability_at_all_is_not_read_as_buyable(client):
+    """"Available at a later date" — described, priced, not orderable."""
+    watch_row(baseline_json=json.dumps(["tee"]))
+    respx.get(url__regex=r".*/products/tee\.js$").mock(
+        return_value=product_json("tee", buyable=True))
+    respx.get(url__regex=r".*/products/tee$").mock(return_value=httpx.Response(
+        200, text='''<html><script type="application/ld+json">
+          {"@type":"Product","name":"Tee"}</script></html>''',
+        headers={"content-type": "text/html"}))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("tee", buyable=True)))
+
+    page = client.get("/api/inspect",
+                      params={"url": f"{STORE}/products/tee"}).json()["sources"]["product_page"]
+
+    assert page["buyable"] is False
+    assert "states no availability" in page["note"]
+
+
+@respx.mock
+def test_the_agreeing_case_raises_nothing(client):
+    watch_row(baseline_json=json.dumps(["tee"]),
+              availability_json=json.dumps({"tee": {"available": True}}))
+    mock_product_sources("tee", buyable=True)
     respx.get(url__startswith=FEED).mock(
         return_value=feed(product("tee", buyable=True)))
 
     body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
 
-    assert body["published_at"] == "2026-09-17 02:36:47", "normalised to UTC"
-    assert body["published_at_raw"] == "2026-09-16T22:36:47-04:00"
+    assert "disagreement" not in body
