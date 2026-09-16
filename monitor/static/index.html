@@ -977,7 +977,8 @@ async function runInspect() {
   const rows = (d.watches || []).map(w => `
     <div class="fired">
       <span class="fi">
-        <span class="k">${esc(w.name)}</span>
+        <span class="k">${esc(w.name)}${w.in_feed === false
+          ? '<span class="tag" title="This collection does not contain the product">not covered</span>' : ''}</span>
         ${esc(w.verdict)}
       </span>
       <span class="ft">swept ${esc(when(w.last_sweep_at))}</span>
@@ -986,7 +987,9 @@ async function runInspect() {
     <p class="sub"><b>${esc(d.title || d.handle)}</b><br>
       ${d.buyable_now ? 'Buyable now' : 'Not buyable — no variant on sale'}
       · listed ${esc(when(d.published_at))}</p>
-    ${rows || `<div class="warn">${esc(d.note || 'Nothing is watching this store.')}</div>`}`;
+    ${rows || ''}
+    ${d.note ? `<div class="warn">${esc(d.note)}</div>` : ''}
+    ${(!rows && !d.note) ? `<div class="warn">Nothing is watching this store.</div>` : ''}`;
 }
 
 const closeSheet = () => $('add').classList.add('hide');

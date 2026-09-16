@@ -325,6 +325,8 @@ def test_inspect_explains_a_coming_soon_listing(client):
                   {"coming-soon-tee": {"available": False}}))
     respx.get(f"{STORE}/products/coming-soon-tee.json").mock(
         return_value=product_json("coming-soon-tee", buyable=False))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("coming-soon-tee", buyable=False)))
 
     r = client.get("/api/inspect",
                    params={"url": f"{STORE}/products/coming-soon-tee"})
@@ -355,6 +357,8 @@ def test_inspect_reports_a_pending_launch(client):
               availability_json=json.dumps({"tee": {"available": False}}))
     respx.get(f"{STORE}/products/tee.json").mock(
         return_value=product_json("tee", buyable=True))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("tee", buyable=True)))
 
     r = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"})
 
@@ -376,3 +380,65 @@ def test_inspect_does_not_invent_data_when_the_store_refuses(client):
 
     assert r.status_code == 502
     assert "unpublished" in r.json()["detail"]
+
+
+# --- does the collection we poll even contain it? --------------------------
+
+@respx.mock
+def test_inspect_names_a_product_the_watched_collection_cannot_see(client):
+    """The decisive question behind "should I watch every collection?".
+
+    A baseline miss is ambiguous — it means either "not swept yet" or "this
+    collection will never contain it", and only the second is a reason to
+    watch something else. So the answer comes from the feed, not the memory.
+    """
+    watch_row(baseline_json=json.dumps(["shell-jacket"]))
+    respx.get(f"{STORE}/products/secret-drop.json").mock(
+        return_value=product_json("secret-drop", buyable=False))
+    # shop-all does not carry it.
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("shell-jacket", buyable=True)))
+
+    r = client.get("/api/inspect", params={"url": f"{STORE}/products/secret-drop"})
+
+    body = r.json()
+    assert body["watches"][0]["in_feed"] is False
+    assert "can never alert on it" in body["watches"][0]["verdict"]
+    assert "covers every collection at once" in body["note"]
+
+
+@respx.mock
+def test_inspect_separates_not_swept_yet_from_not_covered(client):
+    """In the feed but not in the baseline is a timing gap, not a blind spot,
+    and must not push you into creating watches you do not need."""
+    watch_row(baseline_json=json.dumps(["shell-jacket"]))
+    respx.get(f"{STORE}/products/brand-new.json").mock(
+        return_value=product_json("brand-new", buyable=True))
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("shell-jacket", buyable=True),
+                          product("brand-new", buyable=True)))
+
+    r = client.get("/api/inspect", params={"url": f"{STORE}/products/brand-new"})
+
+    w = r.json()["watches"][0]
+    assert w["in_feed"] is True and w["in_catalogue"] is False
+    assert "not yet swept" in w["verdict"]
+    assert "note" not in r.json()
+
+
+@respx.mock
+def test_inspect_does_not_guess_when_the_feed_will_not_load(client):
+    """An unreadable feed is not evidence that the collection lacks the
+    product — saying so would send you off creating watches for nothing."""
+    watch_row(baseline_json=json.dumps(["shell-jacket"]))
+    respx.get(f"{STORE}/products/x.json").mock(
+        return_value=product_json("x", buyable=True))
+    respx.get(url__startswith=FEED).mock(return_value=httpx.Response(503))
+    respx.get(url__startswith=f"{STORE}/collections/shop-all.atom").mock(
+        return_value=httpx.Response(503))
+
+    r = client.get("/api/inspect", params={"url": f"{STORE}/products/x"})
+
+    w = r.json()["watches"][0]
+    assert w["in_feed"] is None
+    assert "cannot say" in w["verdict"]

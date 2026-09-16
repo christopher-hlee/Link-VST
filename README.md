@@ -152,7 +152,23 @@ might have been absorbed as already-on-the-shelf, or might be sitting in the
 ledger waiting to become buyable — and from the outside those are identical.
 **Why no alert?** on the dashboard takes a product URL and says which one it
 is, and what would happen next. `GET /api/inspect?url=…` is the same answer as
-JSON.
+JSON. It re-reads the watch's own feed rather than trusting the baseline,
+because "not in our baseline" means either *not swept yet* or *this collection
+will never contain it* — and only the second is a reason to watch something
+else.
+
+### Watch the store, not the collections
+
+If a brand adds a drop to `/collections/new-arrivals` but not to `shop-all`,
+the fix is **not** a watch per collection. That multiplies traffic to a store
+that already rate-limits us — the thing that got a watch auto-paused once —
+and still misses whichever collection you did not think of.
+
+A Shopify store's `/products.json` is every product published to the online
+store, regardless of collection: a superset of every collection, read in one
+request cycle. Paste the bare store URL (no `/collections/` path) into **Add a
+watch** and the watch covers the whole catalogue. Up to 1000 products, four
+pages of 250.
 
 The tier is a starting point, not a setting: each watch **learns** its own
 cadence. Every clean check earns a little speed (−15s); a 429 gives it back
