@@ -68,6 +68,11 @@ CREATE TABLE IF NOT EXISTS watches (
     -- moment it becomes buyable. The handle baseline cannot: by then the
     -- catalogue has not grown, so there is nothing new to notice.
     availability_json TEXT,
+    -- Unique products in the last COMPLETE read of the feed. The
+    -- baseline is a union and never shrinks, so on its own it cannot
+    -- say whether 717 tracked means 717 on sale or 690 on sale and 27
+    -- long gone.
+    last_seen_count INTEGER,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     last_error   TEXT,
     last_checked_at TEXT,
@@ -114,7 +119,8 @@ CREATE INDEX IF NOT EXISTS idx_events_recent ON events(id DESC);
 # nothing to a table that already exists, so a live database never gains them
 # without this.
 _ADDED_COLUMNS = {
-    "watches": {"last_sweep_at": "TEXT", "availability_json": "TEXT"},
+    "watches": {"last_sweep_at": "TEXT", "availability_json": "TEXT",
+                "last_seen_count": "INTEGER"},
 }
 
 
@@ -148,6 +154,7 @@ WATCH_WRITABLE = {
     "base_interval_s", "hot_interval_s", "hot_until", "alert_level", "enabled",
     "etag", "last_modified", "last_state", "last_price", "last_title",
     "last_image", "last_offers_json", "baseline_json", "availability_json",
+    "last_seen_count",
     "consecutive_failures", "last_error",
     "last_checked_at", "last_sweep_at", "next_check_at", "last_alert_at",
 }

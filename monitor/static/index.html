@@ -476,7 +476,15 @@ function waitRow(w) {
   const armed = isArmed(w);
   let tracked = '';
   if (w.kind === 'collection' && w.baseline_json) {
-    try { tracked = ' · ' + JSON.parse(w.baseline_json).length + ' tracked'; } catch (e) {}
+    try {
+      /* The baseline is a union and never shrinks, so a product the store has
+         retired stays counted. Showing the live figure next to it is the
+         difference between "717 on sale" and "717 remembered, 690 on sale". */
+      const known = JSON.parse(w.baseline_json).length;
+      const live = w.last_seen_count;
+      tracked = ' · ' + known + ' tracked'
+              + (live != null && live !== known ? ` · ${live} in the feed now` : '');
+    } catch (e) {}
   }
   const status = isBackingOff(w)
     ? `<span class="s" style="color:var(--armed)" title="${esc(w.last_error)}">${GLYPH.paused}Backing off</span>`

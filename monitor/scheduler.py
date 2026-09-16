@@ -143,8 +143,18 @@ async def check_watch(watch: dict) -> bool:
     # fresh sweep time on every failure and close the window over the very
     # drops the outage made us miss. A 304 counts — the validator matching is
     # the store confirming nothing changed.
-    if result.ok and (watch.get("kind") or "product") == "collection":
+    if (result.ok and (watch.get("kind") or "product") == "collection"
+            and not result.extra.get("truncated")):
+        # A truncated read is not a sweep. We stopped early — our own page cap,
+        # or a store that asked us to slow down — so part of the catalogue was
+        # never looked at. Stamping a fresh sweep would close the window over
+        # exactly the products we failed to reach, and they would read as old
+        # whenever they finally came into view. Leaving it be costs nothing:
+        # the next complete read covers the gap.
         updates["last_sweep_at"] = stamp()
+        seen = result.extra.get("product_count")
+        if seen is not None:
+            updates["last_seen_count"] = seen
     if decision.pause and watch.get("enabled"):
         # A watch that has failed this many times running is not watching
         # anything. Stop polling rather than retrying into the void forever.

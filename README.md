@@ -168,6 +168,32 @@ saying *not purchasable* over an API saying *buyable* means the store signals
 "coming soon" somewhere other than the variant flag we watch — which is
 something to be told, not something to resolve quietly in the API's favour.
 
+### A partial read is not a sweep
+
+The catalogue is paged, and paging stops for two very different reasons: the
+store ran out of products, or we ran out of permission to keep asking (our own
+page cap, or a 429). Calling the second one a complete sweep loses drops in
+silence — the tail we never fetched stays out of the baseline while the sweep
+window advances past it, so those products read as *old* whenever they finally
+come into view. Same failure as a 304 answering for a page never requested.
+
+A truncated read is therefore marked, and a marked read does not stamp
+`last_sweep_at`. The window stays open until a read that actually finished.
+
+The page cap is ten pages, 2500 products. It only engages while pages keep
+coming back full, so an ordinary catalogue still costs two or three requests.
+It was four pages — a silent 1000-product ceiling — with a catalogue already at
+717.
+
+### "717 tracked" is memory, not inventory
+
+The baseline is a union and never shrinks: a product the store retires stays
+counted, on purpose, so that something briefly dropping out of the feed cannot
+re-alert when it returns. That makes the tracked figure drift above what is
+actually on sale. Watch rows show the live count beside it whenever the two
+differ — *717 tracked · 690 in the feed now*. Neither number can contain a
+duplicate: handles are de-duplicated per read and the baseline is a set.
+
 ### Watch the store, not the collections
 
 If a brand adds a drop to `/collections/new-arrivals` but not to `shop-all`,

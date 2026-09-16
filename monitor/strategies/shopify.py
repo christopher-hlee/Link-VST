@@ -22,7 +22,10 @@ NAME = "shopify"
 # Shopify caps products.json at 250 per page. Four pages covers a 1000-product
 # store, past which a drop watch is the wrong tool anyway.
 PAGE_SIZE = 250
-MAX_PAGES = 4
+# Ten pages is 2500 products. The cap only engages when pages keep coming back
+# FULL, so a normal catalogue still costs two or three requests — raising it
+# buys headroom without spending anything on the stores that do not need it.
+MAX_PAGES = 10
 
 _PRODUCT_RE = re.compile(r"/products/([^/?#]+)")
 _COLLECTION_RE = re.compile(r"/collections/([^/?#]+)")
@@ -314,19 +317,32 @@ async def _check_collection(watch: dict) -> CheckResult:
         # invisible until the ordering happened to shift. Page until the store
         # returns a short page.
         page = 1
+        # Whether we stopped because the catalogue ended, or because we ran out
+        # of permission to keep looking. Those are not the same sweep, and
+        # calling the second one complete is how a drop disappears: the tail we
+        # never fetched stays out of the baseline while the sweep window
+        # advances past it, so when it does become visible its publish date
+        # already reads as old and it is absorbed in silence. Same shape as a
+        # 304 answering for a page we never requested.
+        truncated = False
         while len(products) == page * PAGE_SIZE and page < MAX_PAGES:
             page += 1
             more = await fetch(f"{base}{path}?limit={PAGE_SIZE}&page={page}")
             if more.rate_limited:
                 # Stop paging rather than push a host that just said slow down.
-                # A short read is still a usable sweep; the union keeps history.
+                truncated = True
                 break
             if not (more.ok and isinstance(more.json, dict)):
+                truncated = True
                 break
             batch = more.json.get("products") or []
             if not batch:
                 break
             products += batch
+        else:
+            # Fell out of the while condition rather than breaking. If the last
+            # page was full, the store has more and we hit our own page cap.
+            truncated = len(products) == page * PAGE_SIZE and page >= MAX_PAGES
 
         # De-duplicated, order preserved. Not every store honours `&page=`; one
         # that ignores it hands back the same 250 products for every page, and
@@ -349,6 +365,7 @@ async def _check_collection(watch: dict) -> CheckResult:
             etag=resp.etag,
             last_modified=resp.last_modified,
             extra={"product_count": len(handles),
+                   "truncated": truncated,
                    # Rows read vs unique products vs pages fetched. If a store
                    # ignores `&page=`, rows_read is pages × 250 while
                    # product_count stays at 250 — which is the difference
