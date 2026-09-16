@@ -174,8 +174,18 @@ async def inspect(url: str = Query(..., min_length=8)):
         elif buyable and entry.get("available") is False:
             verdict = "buyable in the feed and last seen unbuyable — the next sweep alerts"
         elif not buyable:
-            verdict = ("tracked, and the feed says not buyable — you will be "
-                       "alerted the moment a variant goes on sale")
+            # "The feed says not buyable" and "we have RECORDED that it is not
+            # buyable" are different facts, and only the second is what the
+            # launch detector flips from. Promising an alert off the first
+            # would be the same overreach as the last bug: a claim the data
+            # underneath does not support.
+            if entry.get("available") is False:
+                verdict = ("tracked and armed — the feed says not buyable and "
+                           "we have that on record, so the moment a variant "
+                           "goes on sale you get an alert")
+            else:
+                verdict = ("tracked, and the feed says not buyable, but that "
+                           "is not on record yet — the next sweep arms it")
         elif arrival == ARRIVAL_KNOWN:
             verdict = "already on the shelf when we adopted it; nothing pending"
         else:

@@ -591,3 +591,25 @@ def test_the_agreeing_case_raises_nothing(client):
     body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
 
     assert "disagreement" not in body
+
+
+# --- a promise has to be backed by the ledger ------------------------------
+
+@respx.mock
+def test_armed_and_merely_unbuyable_are_told_apart(client):
+    """The launch detector flips from a RECORDED false, so "the feed says not
+    buyable" is not by itself grounds to promise an alert."""
+    armed = watch_row(name="armed", baseline_json=json.dumps(["tee"]),
+                      availability_json=json.dumps({"tee": {"available": False}}))
+    mock_product_sources("tee", buyable=False,
+                         availability="https://schema.org/OutOfStock")
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("tee", buyable=False)))
+
+    body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
+    assert "tracked and armed" in body["watches"][0]["verdict"]
+
+    db.update_watch(armed, availability_json=None)
+    body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
+    assert "not on record yet" in body["watches"][0]["verdict"]
+    assert "the next sweep arms it" in body["watches"][0]["verdict"]
