@@ -260,9 +260,9 @@ def test_the_launch_alert_does_not_claim_the_catalogue_grew():
     body = telegram.render(
         {"name": "Satisfy", "brand": "satisfyrunning.com"}, "new_product",
         {"handles": ["a"], "titles": {"a": "Coming Soon Tee"},
-         "baseline_count": 333, "arrival": "launched"})
+         "baseline_count": 333, "arrival": "launched", "first_sale": ["a"]})
 
-    assert "now buyable" in body
+    assert "released" in body
     assert "333 → 334" not in body, "the product was already counted"
     assert "Just listed" not in body
 
@@ -353,7 +353,11 @@ def test_inspect_explains_a_coming_soon_listing(client):
     body = r.json()
     assert body["buyable_now"] is False
     assert body["watches"][0]["in_catalogue"] is True
-    assert "not buyable" in body["watches"][0]["verdict"]
+    # Never seen on sale, so this is "Coming Soon", not "Notify me when
+    # available" — and the alert it produces should be named accordingly.
+    assert body["watches"][0]["ever_buyable"] is False
+    assert "never seen on sale" in body["watches"][0]["verdict"]
+    assert "will say released" in body["watches"][0]["verdict"]
 
 
 @respx.mock
@@ -661,3 +665,23 @@ def test_inspect_shows_what_was_already_sent_about_this_product(client):
 
     assert [a["arrival"] for a in alerts] == ["relisted"]
     assert alerts[0]["listed_ago_s"] == 240
+
+
+@respx.mock
+def test_inspect_names_a_sold_out_product_as_sold_out(client):
+    """Same flag, different history, different verdict — and the difference is
+    the one the storefront shows as "Notify Me When Available"."""
+    watch_row(baseline_json=json.dumps(["tee"]),
+              availability_json=json.dumps(
+                  {"tee": {"available": False, "ever_buyable": True}}))
+    mock_product_sources("tee", buyable=False,
+                         availability="https://schema.org/OutOfStock")
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("tee", buyable=False)))
+
+    w = client.get("/api/inspect",
+                   params={"url": f"{STORE}/products/tee"}).json()["watches"][0]
+
+    assert w["ever_buyable"] is True
+    assert "sold out" in w["verdict"]
+    assert "will say back in stock" in w["verdict"]

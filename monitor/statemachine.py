@@ -238,9 +238,15 @@ def _decide_collection(prev_state, prev_baseline, result, events,
                 and h not in buckets.get(ARRIVAL_UNCONFIRMED, ())
                 and _became_buyable(prev_availability, items, h, now)]
     if launched:
+        # Released, or restocked? Only the ones we have never seen on sale are
+        # releases — and only as far back as we have been watching, which the
+        # wording has to admit rather than claim a debut we cannot know about.
+        debut = [h for h in launched
+                 if not (prev_availability or {}).get(h, {}).get("ever_buyable")]
         payload = {**_prune(_payload(result), launched),
                    "handles": launched,
                    "arrival": ARRIVAL_LAUNCHED,
+                   "first_sale": sorted(debut),
                    "baseline_count": len(known)}
         events.append(Event(kind=NEW_PRODUCT, from_state=prev_state,
                             to_state=WATCHING, payload=payload))
@@ -313,7 +319,15 @@ def _fold_availability(prev, items, handles, *, alerted, now) -> dict:
         item = items.get(handle) or {}
         before = ledger.get(handle)
         before = before if isinstance(before, dict) else {}
-        entry = {"available": bool(item.get("available"))}
+        buyable = bool(item.get("available"))
+        entry = {"available": buyable}
+        # Two storefront states share one API flag. "Coming soon" and "notify
+        # me when available" are both available:false, and they are not the
+        # same event at all — one is a release, the other a restock. Nothing in
+        # the feed separates them, but our own history does: a product we have
+        # never once seen on sale is one that has not been released yet.
+        if buyable or before.get("ever_buyable"):
+            entry["ever_buyable"] = True
         alerted_at = before.get("alerted_at")
         if handle in launched:
             alerted_at = stamp(now)

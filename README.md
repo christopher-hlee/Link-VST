@@ -185,6 +185,32 @@ coming back full, so an ordinary catalogue still costs two or three requests.
 It was four pages — a silent 1000-product ceiling — with a catalogue already at
 717.
 
+### "Coming Soon" and "Notify Me When Available" are one flag
+
+The storefront distinguishes them plainly — one product has not been released,
+the other has sold out — and a release matters more than a restock. The
+catalogue API collapses both into `available: false`, so nothing in the feed
+tells them apart.
+
+Our own history does. The availability ledger records `ever_buyable` the first
+time a product is seen on sale, and it survives the product selling out. So a
+product going buyable is a **release** if we have never once seen it on sale,
+and a **restock** if we have:
+
+| storefront | ledger | alert |
+|---|---|---|
+| Coming Soon | never seen on sale | ⚡ *released* |
+| Notify Me When Available | seen on sale before | 🔄 *back in stock* |
+
+The wording is "on sale for the first time **since I started watching**",
+because that is the honest extent of the claim: we cannot see what the store
+sold before the watch existed. A product first met while already sold out will
+read as a release when it returns, and saying so is better than asserting a
+debut we have no way to know about.
+
+Watch rows show **Not yet on sale** rather than *Sold out* for a product with
+no recorded sale, for the same reason.
+
 ### A republished item you cannot buy is not news
 
 Watching the whole store instead of a curated collection costs something: the

@@ -134,8 +134,23 @@ def render(watch: dict, kind: str, payload: dict) -> str:
             # for a "coming soon" listing that has just gone buyable, which is
             # the moment that actually matters and the one a handle diff can
             # never see.
-            lines.append(f"<b>⚡ {n} now buyable at {_esc(brand or title)}</b>")
-            lines.append("Listed earlier, on sale as of now:")
+            #
+            # A release and a restock reach us as the same flag, so they are
+            # told apart by our own history: a product never once seen on sale
+            # is one that had not been released. The wording says "since I
+            # started watching" because that is the honest extent of it — we
+            # cannot know what the store sold before we were looking.
+            debut = set(payload.get("first_sale") or [])
+            if debut and len(debut) == n:
+                lines.append(f"<b>⚡ {n} released at {_esc(brand or title)}</b>")
+                lines.append("On sale for the first time since I started watching:")
+            elif debut:
+                lines.append(f"<b>⚡ {n} now on sale at {_esc(brand or title)}</b>")
+                lines.append(f"{len(debut)} for the first time, "
+                             f"{n - len(debut)} back in stock:")
+            else:
+                lines.append(f"<b>🔄 {n} back in stock at {_esc(brand or title)}</b>")
+                lines.append("Sold out before, on sale again as of now:")
         elif arrival == "relisted":
             # Republished, not released. Shopify resets published_at when an
             # item comes back, so without saying this the alert would present a

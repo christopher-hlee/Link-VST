@@ -157,6 +157,9 @@ async def inspect(url: str = Query(..., min_length=8)):
 
         stated = bool(item and item.get("available_stated"))
         buyable = item.get("available") if stated else None
+        ever = bool(entry.get("ever_buyable"))
+        if item and item.get("tags"):
+            report.setdefault("tags", item["tags"])
         if buyable is not None and feed_available is None:
             feed_available = buyable
 
@@ -184,9 +187,15 @@ async def inspect(url: str = Query(..., min_length=8)):
             # would be the same overreach as the last bug: a claim the data
             # underneath does not support.
             if entry.get("available") is False:
-                verdict = ("tracked and armed — the feed says not buyable and "
-                           "we have that on record, so the moment a variant "
-                           "goes on sale you get an alert")
+                # "Coming soon" and "notify me when available" are the same
+                # flag, so say which one our history makes it, and say what
+                # the resulting alert will be called.
+                verdict = ("tracked and armed — " + (
+                    "sold out since we have seen it on sale, so the next "
+                    "alert will say back in stock"
+                    if ever else
+                    "never seen on sale, so this reads as not yet released "
+                    "and the next alert will say released"))
             else:
                 verdict = ("tracked, and the feed says not buyable, but that "
                            "is not on record yet — the next sweep arms it")
@@ -208,6 +217,7 @@ async def inspect(url: str = Query(..., min_length=8)):
             "id": w["id"], "name": w["name"],
             "in_feed": visible, "in_catalogue": remembered,
             "known_buyable": entry.get("available"),
+            "ever_buyable": ever,
             "last_sweep_at": w.get("last_sweep_at"),
             "interval_s": w.get("base_interval_s") or 300,
             "verdict": verdict,

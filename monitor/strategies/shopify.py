@@ -187,6 +187,10 @@ def _collection_item(base: str, product: dict) -> dict:
         # from a drop.
         "available": bool(offers),
         "available_stated": stated,
+        # Themes drive a "Coming soon" button from somewhere, and a tag is the
+        # usual somewhere. Carried so the store's own convention can be read
+        # off a real product rather than guessed at.
+        "tags": product.get("tags") or [],
     }
 
 

@@ -270,6 +270,9 @@ const GLYPH = {
   armed:       '<svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" transform="rotate(45 5 5)" fill="currentColor"/></svg>',
   paused:      '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="2" y="2" width="2.2" height="6" fill="currentColor"/><rect x="5.8" y="2" width="2.2" height="6" fill="currentColor"/></svg>',
 };
+/* A product that has never been on sale is not sold out — the storefront
+   says "Coming Soon" for one and "Notify Me When Available" for the other,
+   and calling both sold out loses the distinction that matters most. */
 const WORD = {in_stock: 'In stock', held: 'Held', out_of_stock: 'Sold out',
               failing: 'Failing', unknown: 'No baseline', watching: 'Watching', paused: 'Paused'};
 const INK = {in_stock: 'var(--in-stock)', held: 'var(--held)', out_of_stock: 'var(--muted)',
@@ -474,6 +477,11 @@ function brokenRow(w) {
 function waitRow(w) {
   const st = derive(w);
   const armed = isArmed(w);
+  /* Never been on sale as far as we have seen: "Not yet on sale", not
+     "Sold out". */
+  const stateWord = (w, st) =>
+    st === 'out_of_stock' && w.ever_buyable === false ? 'Not yet on sale' : WORD[st];
+
   let tracked = '';
   if (w.kind === 'collection' && w.baseline_json) {
     try {
@@ -490,7 +498,7 @@ function waitRow(w) {
     ? `<span class="s" style="color:var(--armed)" title="${esc(w.last_error)}">${GLYPH.paused}Backing off</span>`
     : armed
     ? `<span class="s" style="color:var(--armed)"><span class="pulse" style="display:inline-flex">${GLYPH.armed}</span>Armed${esc(tracked)}</span>`
-    : `<span class="s" style="color:${INK[st]}">${['unknown', 'watching', 'paused'].includes(st) ? GLYPH[st] : ''}${esc(WORD[st])}${esc(tracked)}</span>`;
+    : `<span class="s" style="color:${INK[st]}">${['unknown', 'watching', 'paused'].includes(st) ? GLYPH[st] : ''}${esc(stateWord(w, st))}${esc(tracked)}</span>`;
   const size = w.size_pref
     ? `<span style="color:var(--dim);font-size:12px"> · size ${esc(w.size_pref.toUpperCase())}</span>` : '';
   return `<div class="wait">
