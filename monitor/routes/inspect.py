@@ -11,7 +11,7 @@ building cart links, announced "buyable now" about a product the storefront was
 showing as Coming Soon. A diagnostic that invents the fact it was asked to
 check is worse than no diagnostic, because it is believed.
 """
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -44,7 +44,11 @@ def _handle(url: str) -> str | None:
     if "products" in parts:
         index = parts.index("products")
         if index + 1 < len(parts):
-            return parts[index + 1].split("?")[0]
+            # A handle carrying a trademark sign arrives as
+            # `heatcrush%E2%84%A2-arm-sleeves`, while the feed lists it decoded.
+            # Comparing the two forms says the store does not have a product it
+            # very much does — and the answer reads as "not covered".
+            return unquote(parts[index + 1].split("?")[0])
     return None
 
 
@@ -229,6 +233,16 @@ async def inspect(url: str = Query(..., min_length=8)):
         report["disagreement"] = (
             "The product page says it IS purchasable but the catalogue API says "
             "it is not. The feed is what we poll, so an alert may be late here.")
+
+    # What we actually sent about this product, so "why did I get that?" is a
+    # matter of record rather than of reconstruction.
+    report["alerts"] = [
+        {"at": e.get("created_at"), "kind": e.get("kind"),
+         "arrival": (e.get("payload") or {}).get("arrival"),
+         "listed_ago_s": (e.get("payload") or {}).get("listed_ago_s")}
+        for e in db.list_events(limit=400)
+        if handle in ((e.get("payload") or {}).get("handles") or [])
+    ][:10]
 
     if not covering:
         report["note"] = (f"No collection watch covers {base}. Nothing is "

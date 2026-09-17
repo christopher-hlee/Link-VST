@@ -1040,6 +1040,10 @@ async function runInspect() {
         (src.product_page.availability || []).join(', ')
           || src.product_page.note || '') : ''}
     ${rows || ''}
+    ${(d.alerts || []).length ? `<div class="fired">
+        <span class="fi"><span class="k">Already sent about this</span>
+        ${d.alerts.map(a => esc(`${a.arrival || a.kind} · ${when(a.at)}`)).join('<br>')}
+        </span></div>` : ''}
     ${d.note ? `<div class="warn">${esc(d.note)}</div>` : ''}
     ${(!rows && !d.note) ? `<div class="warn">Nothing is watching this store.</div>` : ''}`;
 }

@@ -210,7 +210,8 @@ def _decide_collection(prev_state, prev_baseline, result, events,
     # ARRIVAL_KNOWN is absorbed in silence: it was already on the shelf, we
     # just had not looked at it. That single line is the whole fix.
     for kind in (ARRIVAL_NEW, ARRIVAL_RELISTED, ARRIVAL_UNCONFIRMED):
-        fresh = buckets.get(kind)
+        fresh = [h for h in buckets.get(kind, ())
+                 if _worth_waking_someone_for(kind, items.get(h) or {})]
         if not fresh:
             continue
         payload = {**_prune(_payload(result), fresh),
@@ -251,6 +252,27 @@ def _decide_collection(prev_state, prev_baseline, result, events,
                     availability=_fold_availability(prev_availability, items,
                                                     handles, alerted=launched,
                                                     now=now))
+
+
+def _worth_waking_someone_for(kind: str, item: dict) -> bool:
+    """Whether an arriving product is something you could act on.
+
+    A product the store just RE-published, that you cannot buy, is not news: it
+    is an old sold-out item passing through the catalogue again, and the alerts
+    for those are the ones that teach you to ignore the app. The same goes for
+    an arrival we cannot even date.
+
+    Nothing is lost by staying quiet. The product still enters the baseline and
+    the availability ledger, so it is armed — the moment a variant goes on sale
+    it announces itself as a launch, which is the alert that was actually worth
+    having. A genuinely NEW listing still speaks up either way, because knowing
+    a drop is coming is the point of a "coming soon" page.
+    """
+    if kind == ARRIVAL_NEW:
+        return True
+    if not item.get("available_stated"):
+        return True          # the store said nothing; do not read that as "no"
+    return bool(item.get("available"))
 
 
 # How long before the same product may announce a launch again. A hot item

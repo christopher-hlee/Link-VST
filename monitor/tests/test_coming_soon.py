@@ -613,3 +613,51 @@ def test_armed_and_merely_unbuyable_are_told_apart(client):
     body = client.get("/api/inspect", params={"url": f"{STORE}/products/tee"}).json()
     assert "not on record yet" in body["watches"][0]["verdict"]
     assert "the next sweep arms it" in body["watches"][0]["verdict"]
+
+
+# --- handles are not always ASCII ------------------------------------------
+
+@respx.mock
+def test_a_trademark_sign_in_the_handle_is_not_a_different_product(client):
+    """`/products/heatcrush%E2%84%A2-arm-sleeves-cl` names the same product the
+    feed lists as `heatcrush™-arm-sleeves-cl`. Comparing the encoded form
+    against the decoded one reports a product the store has as missing."""
+    handle = "heatcrush™-arm-sleeves-cl"
+    watch_row(baseline_json=json.dumps([handle]),
+              availability_json=json.dumps({handle: {"available": False}}))
+    respx.get(url__regex=r".*/products/.*\.js$").mock(
+        return_value=product_json(handle, buyable=False))
+    respx.get(url__regex=r".*/products/[^.]+$").mock(
+        return_value=page_html(availability="https://schema.org/OutOfStock"))
+    respx.get(url__startswith=FEED).mock(return_value=httpx.Response(
+        200, json={"products": [{
+            "handle": handle, "title": "HEATCRUSH™ Arm Sleeves",
+            "published_at": ago(days=9), "created_at": ago(days=9),
+            "variants": [{"id": 1, "title": "M", "available": False,
+                          "price": "45.00"}]}]}))
+
+    body = client.get("/api/inspect", params={
+        "url": f"{STORE}/products/heatcrush%E2%84%A2-arm-sleeves-cl"}).json()
+
+    assert body["handle"] == handle
+    assert body["watches"][0]["in_feed"] is True, \
+        "the percent-encoded URL names a product the feed does have"
+
+
+@respx.mock
+def test_inspect_shows_what_was_already_sent_about_this_product(client):
+    """"Why did I get that alert?" should be a matter of record."""
+    wid = watch_row(baseline_json=json.dumps(["tee"]))
+    db.insert_event(wid, "new_product", "watching", "watching",
+                    {"handles": ["tee"], "arrival": "relisted",
+                     "listed_ago_s": 240})
+    mock_product_sources("tee", buyable=False,
+                         availability="https://schema.org/OutOfStock")
+    respx.get(url__startswith=FEED).mock(
+        return_value=feed(product("tee", buyable=False)))
+
+    alerts = client.get("/api/inspect",
+                        params={"url": f"{STORE}/products/tee"}).json()["alerts"]
+
+    assert [a["arrival"] for a in alerts] == ["relisted"]
+    assert alerts[0]["listed_ago_s"] == 240

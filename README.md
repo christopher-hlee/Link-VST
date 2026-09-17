@@ -185,6 +185,28 @@ coming back full, so an ordinary catalogue still costs two or three requests.
 It was four pages — a silent 1000-product ceiling — with a catalogue already at
 717.
 
+### A republished item you cannot buy is not news
+
+Watching the whole store instead of a curated collection costs something: the
+store-wide feed carries the archive, and brands put old stock back through it
+routinely. Every one of those looks like an arrival, and alerting on them is
+how a useful notification becomes one you swipe away unread.
+
+So an arrival only speaks up if you could act on it. A **relisted** or
+**undateable** product with no buyable variant is recorded silently; a
+genuinely **new** listing still announces itself even when it is not yet
+buyable, because knowing a drop is coming is the point of a "coming soon" page.
+
+Staying quiet costs nothing, and that is the part that makes this safe: the
+product still enters the baseline and the availability ledger, so it is armed.
+The moment a variant goes on sale it announces itself as a launch — which was
+the alert worth having all along.
+
+One exception, and it is load-bearing: a store we can only read through the
+Atom fallback sends no availability at all. Reading that silence as "not
+buyable" would mute every relisted arrival from such a store, permanently and
+invisibly, so an unstated flag is never treated as a no.
+
 ### "717 tracked" is memory, not inventory
 
 The baseline is a union and never shrinks: a product the store retires stays
