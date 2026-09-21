@@ -160,6 +160,11 @@ async def inspect(url: str = Query(..., min_length=8)):
         ever = bool(entry.get("ever_buyable"))
         if item and item.get("tags"):
             report.setdefault("tags", item["tags"])
+        if item:
+            report.setdefault("list_price", item.get("list_price"))
+            report.setdefault("has_image", item.get("has_image"))
+        staged = bool(item and item.get("price_stated")
+                      and not item.get("list_price") and not buyable)
         if buyable is not None and feed_available is None:
             feed_available = buyable
 
@@ -180,6 +185,12 @@ async def inspect(url: str = Query(..., min_length=8)):
                        "product, so I cannot tell you whether it is buyable")
         elif buyable and entry.get("available") is False:
             verdict = "buyable in the feed and last seen unbuyable — the next sweep alerts"
+        elif staged:
+            verdict = ("tracked, and still being built — no price set and "
+                       "nothing to sell, so this reads as a record the store "
+                       "is drafting rather than a listing. Silent on purpose; "
+                       "it alerts as a release once it has a price and a "
+                       "variant on sale")
         elif not buyable:
             # "The feed says not buyable" and "we have RECORDED that it is not
             # buyable" are different facts, and only the second is what the
@@ -218,6 +229,7 @@ async def inspect(url: str = Query(..., min_length=8)):
             "in_feed": visible, "in_catalogue": remembered,
             "known_buyable": entry.get("available"),
             "ever_buyable": ever,
+            "still_being_built": staged,
             "last_sweep_at": w.get("last_sweep_at"),
             "interval_s": w.get("base_interval_s") or 300,
             "verdict": verdict,

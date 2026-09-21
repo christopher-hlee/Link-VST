@@ -12,7 +12,7 @@ Falls back to the Atom feed when products.json is gated, which some stores do.
 import json
 import re
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 
 from ..fetcher import fetch
 from ..statemachine import CheckResult, HELD, IN_STOCK, OUT_OF_STOCK
@@ -53,6 +53,16 @@ def collection_handle(url: str) -> str | None:
     if not m:
         return None
     return re.sub(r"\.(atom|rss|json|xml)$", "", m.group(1), flags=re.I)
+
+
+def _slug(handle) -> str:
+    """A handle as it belongs in a URL.
+
+    Satisfy ships handles with a trademark sign in them. A raw `™` in an href
+    works in most browsers by accident rather than by rule, and nothing else we
+    hand the link to is obliged to be as forgiving.
+    """
+    return quote(str(handle or ""), safe="")
 
 
 def cart_url(base: str, variant_id) -> str:
@@ -163,10 +173,25 @@ def _collection_item(base: str, product: dict) -> dict:
         for v in live
     ]
     images = product.get("images") or []
+    # The asking price, whether or not you can buy it. `price` below is taken
+    # from the buyable variants, so it is None for everything sold out or not
+    # yet released — which makes a finished "coming soon" listing at 260 USD
+    # indistinguishable from a half-built record at 0. That difference is the
+    # only thing separating a drop being prepared from a drop being announced.
+    sellable = [v for v in variants if v.get("id")]
+    asking = [q for q in (_price(v.get("price"), in_cents=False)
+                          for v in sellable) if q]
     return {
-        "url": f"{base}/products/{handle}",
+        "url": f"{base}/products/{_slug(handle)}",
         "title": product.get("title"),
         "price": offers[0]["price"] if offers else None,
+        "list_price": min(asking) if asking else None,
+        # Whether there was anything to read a price FROM. A product with no
+        # variants tells us nothing about its price; one with a variant priced
+        # at 0.00 is telling us something. Collapsing those two would mute
+        # every store we can only read through a feed that omits variants.
+        "price_stated": bool(sellable),
+        "has_image": bool(images),
         "image": _image_url(images[0] if images else None),
         "offers": offers[:12],
         # Two different facts, kept apart on purpose.

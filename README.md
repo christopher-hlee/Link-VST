@@ -185,6 +185,38 @@ coming back full, so an ordinary catalogue still costs two or three requests.
 It was four pages — a silent 1000-product ceiling — with a catalogue already at
 717.
 
+### A record being drafted is not a listing
+
+A brand assembles a drop in public. Satisfy creates the products days ahead —
+published, so they appear in the feed — with no price, no photography, no
+sizes, and working titles like *moth pred women* or *MothTech™ T-ShirtCL*. One
+handle carried a `-13` suffix: Shopify numbering the thirteenth attempt at the
+same one as it was made and deleted over and over. Two of the pages we linked
+had 404'd by the time they were opened.
+
+Every one of those is a genuinely new handle published seconds ago, so every
+one is a correctly classified `new` arrival — and five in a morning is how an
+alert becomes wallpaper.
+
+The signal that separates them is **price**. A finished "coming soon" listing
+has one: 260 USD, photographed, sized, just not purchasable yet. A record
+still being drafted has 0 or none. So an arrival with a stated price of zero
+and nothing on sale stays silent.
+
+This needed a fix upstream first: `price` was read from the *buyable* variants
+only, which makes it `None` for anything sold out or unreleased — so a
+finished coming-soon listing and a half-built record looked identical. The
+asking price is now read across all variants, independent of availability.
+
+Two guards, for the same reason as everywhere else: a product with **no
+variants** tells us nothing about price, and the Atom fallback carries no
+prices at all. Neither is read as "priced at zero", or every store behind a
+JSON gate goes quiet.
+
+And as ever, silence is safe only because nothing is forgotten: the record
+enters the baseline and the ledger, so when it acquires a price and a variant
+on sale it announces itself as a **release**.
+
 ### "Coming Soon" and "Notify Me When Available" are one flag
 
 The storefront distinguishes them plainly — one product has not been released,

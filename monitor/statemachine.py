@@ -274,11 +274,37 @@ def _worth_waking_someone_for(kind: str, item: dict) -> bool:
     having. A genuinely NEW listing still speaks up either way, because knowing
     a drop is coming is the point of a "coming soon" page.
     """
+    if item.get("available"):
+        return True          # you can buy it; that is always worth knowing
+
+    # A record the store is still building. Satisfy stages a drop by creating
+    # products with no price, no photography and no sizes — titles like "moth
+    # pred women", handles numbered up to -13 as the same one is made and
+    # deleted over and over. Each creation is a genuinely new handle published
+    # seconds ago, so it is a correctly classified NEW arrival and still not a
+    # release. Five of those in one morning is how an alert becomes wallpaper.
+    #
+    # Priced but not buyable is the opposite case and stays: that is a
+    # finished "coming soon" listing, where knowing a drop is due is the point.
+    if _still_being_built(item):
+        return False
+
     if kind == ARRIVAL_NEW:
         return True
     if not item.get("available_stated"):
         return True          # the store said nothing; do not read that as "no"
-    return bool(item.get("available"))
+    return False
+
+
+def _still_being_built(item: dict) -> bool:
+    """No price, and nothing to sell. Not a listing yet.
+
+    Staying quiet costs nothing here, which is the only reason it is safe: the
+    product is still recorded and still armed, so when it acquires a price and
+    goes on sale it announces itself as a release. The alert is not lost, only
+    withheld until there is something behind it.
+    """
+    return bool(item.get("price_stated")) and not item.get("list_price")
 
 
 # How long before the same product may announce a launch again. A hot item
