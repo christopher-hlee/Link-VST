@@ -479,3 +479,53 @@ nothing succeeded trips the same alarm as a crash.
 
 Playwright for JS-rendered sites. Auto-checkout is deliberately out of scope:
 this notifies, it doesn't buy.
+
+## Adding a store whose filters are not Shopify's
+
+Some stores run faceted search through a third party — RAGTAG Global runs Boost
+AI Search & Discovery — and encode a saved search in the storefront URL:
+
+```
+/collections/men_all?pf_st_availability=in-stock
+  &pf_t_gender=gender_Mens&pf_t_size=size_L&pf_t_size=size_XL
+  &pf_v_brand=COMOLI
+```
+
+**Those parameters have no effect on `products.json`.** Handing the URL to
+Shopify returns the whole unfiltered collection — which looks like it is
+working while being wrong, the worst failure available. So the filter is
+re-implemented on our side: `filters.parse_boost_url` turns the URL into
+predicates, and `filters.matches` evaluates them against each entry.
+
+Repeating one facet is an **or**; separate facets are an **and**.
+`pf_t_size=size_L&pf_t_size=size_XL` means L or XL, and flattening the facets
+into a single required-tags list would demand a garment be both, which nothing
+is.
+
+The filter is applied **at the point of speaking, never to the sweep**.
+Everything the collection holds still enters the baseline and the ledger, so
+narrowing or widening a saved search later cannot replay a catalogue you have
+already been shown — and a garment listed three weeks ago does not become new
+because you started wanting its size today.
+
+### Consignment stores invert the event
+
+A manufacturer's product has many sizes and gets replenished, so a restock is
+`available` flipping false to true on a known variant. A consignment listing is
+a single unique garment, quantity one, one variant titled `Default Title`, gone
+for good when sold. Nothing ever restocks; the only event is *a new listing
+matching my filter*. That is the detection this app already does — a
+collection watch diffs set membership — pointed at a store whose metadata lives
+somewhere else.
+
+Somewhere else being **tags**. Size on such a store is `size_M`, not
+`variant.title`, so every variant-reading size path matches zero items without
+erroring. `size_pref` is for manufacturer stores; `filter_json` is for these.
+
+### Currency
+
+Per watch, defaulting to USD. A yen store read as dollars is wrong by a factor
+of about 142, in the flattering direction. There is no FX conversion: the
+alert prints ¥49,160 because that is what the store charges, and inventing a
+dollar figure would mean carrying a rate that goes stale silently.
+

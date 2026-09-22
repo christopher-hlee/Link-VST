@@ -84,6 +84,7 @@ async def check_watch(watch: dict) -> bool:
         failure_threshold=FAILURE_ALERT_THRESHOLD,
         window_start=_sweep_window(watch),
         prev_availability=db.get_availability(watch),
+        wanted=db.get_filter(watch),
     )
 
     interval = next_interval(

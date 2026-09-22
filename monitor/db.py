@@ -68,6 +68,15 @@ CREATE TABLE IF NOT EXISTS watches (
     -- moment it becomes buyable. The handle baseline cannot: by then the
     -- catalogue has not grown, so there is nothing new to notice.
     availability_json TEXT,
+    -- A saved search, evaluated against each catalogue entry. Needed
+    -- for stores whose facets are applied by a search service rather
+    -- than by Shopify: their filter parameters have no effect on
+    -- products.json, so passing the URL through returns the whole
+    -- unfiltered collection and looks like it worked.
+    filter_json  TEXT,
+    -- What the prices in this store are denominated in. A yen store
+    -- read as dollars is wrong by a factor of about 142.
+    currency     TEXT NOT NULL DEFAULT 'USD',
     -- Unique products in the last COMPLETE read of the feed. The
     -- baseline is a union and never shrinks, so on its own it cannot
     -- say whether 717 tracked means 717 on sale or 690 on sale and 27
@@ -120,7 +129,9 @@ CREATE INDEX IF NOT EXISTS idx_events_recent ON events(id DESC);
 # without this.
 _ADDED_COLUMNS = {
     "watches": {"last_sweep_at": "TEXT", "availability_json": "TEXT",
-                "last_seen_count": "INTEGER"},
+                "last_seen_count": "INTEGER",
+                "filter_json": "TEXT",
+                "currency": "TEXT NOT NULL DEFAULT 'USD'"},
 }
 
 
@@ -154,7 +165,7 @@ WATCH_WRITABLE = {
     "base_interval_s", "hot_interval_s", "hot_until", "alert_level", "enabled",
     "etag", "last_modified", "last_state", "last_price", "last_title",
     "last_image", "last_offers_json", "baseline_json", "availability_json",
-    "last_seen_count",
+    "last_seen_count", "filter_json", "currency",
     "consecutive_failures", "last_error",
     "last_checked_at", "last_sweep_at", "next_check_at", "last_alert_at",
 }
@@ -237,6 +248,18 @@ def get_baseline(watch: dict) -> list[str] | None:
         return json.loads(raw)
     except (ValueError, TypeError):
         return None
+
+
+def get_filter(watch: dict) -> dict | None:
+    """The watch's saved search, or None for "everything in the collection"."""
+    raw = watch.get("filter_json")
+    if not raw:
+        return None
+    try:
+        spec = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return spec if isinstance(spec, dict) and spec else None
 
 
 def get_availability(watch: dict) -> dict:

@@ -4,7 +4,9 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import db, scheduler, strategies
+import json
+
+from .. import db, filters, scheduler, strategies
 from ..config import (BESTBUY_API_KEY, INTERVAL_BASE, INTERVAL_HOT,
                       INTERVAL_SLOW)
 from ..statemachine import UNKNOWN
@@ -26,6 +28,10 @@ class WatchCreate(BaseModel):
     size_pref: str | None = None
     tier: str = "base"
     alert_level: str = "info"
+    # A saved search, for stores whose facets are applied by a search service
+    # rather than by Shopify. Omitted for everything else.
+    filter_json: dict | None = None
+    currency: str | None = None
 
 
 class WatchUpdate(BaseModel):
@@ -38,6 +44,8 @@ class WatchUpdate(BaseModel):
     tier: str | None = None
     alert_level: str | None = None
     enabled: bool | None = None
+    filter_json: dict | None = None
+    currency: str | None = None
 
 
 # Changing any of these changes what the watch is looking at, which invalidates
@@ -45,6 +53,9 @@ class WatchUpdate(BaseModel):
 REBASELINE_FIELDS = {"url", "target_ref"}
 # Changing these changes what counts as a match, so the current state is stale.
 RECHECK_FIELDS = REBASELINE_FIELDS | {"size_pref"}
+# Narrowing a saved search must NOT rebaseline. The filter decides what is
+# said, not what has been seen, and replaying a catalogue you have already been
+# shown is exactly what the baseline exists to prevent.
 
 
 class ArmRequest(BaseModel):
@@ -87,6 +98,18 @@ def _fallback_name(url: str, target_ref: str | None) -> str:
     return f"{host} · {target_ref}" if target_ref else host
 
 
+def _saved_search(fields: dict, url: str) -> None:
+    """Store the filter as text, reading it off the URL when not given.
+
+    A storefront filter belonging to a search service has no effect on
+    products.json: pass the URL through and Shopify returns the whole
+    unfiltered collection, which looks like it is working while being wrong.
+    Recognising the parameters here is what stops that from being silent.
+    """
+    spec = fields.pop("filter_json", None) or filters.parse_boost_url(url)
+    fields["filter_json"] = json.dumps(spec) if spec else None
+
+
 @router.post("/watches", status_code=201)
 async def create_watch(body: WatchCreate):
     fields = body.model_dump(exclude_none=True)
@@ -124,6 +147,7 @@ async def create_watch(body: WatchCreate):
     fields.setdefault("name", _fallback_name(body.url, fields.get("target_ref")))
     fields["base_interval_s"] = TIERS[tier]
     fields["next_check_at"] = EPOCH
+    _saved_search(fields, body.url)
 
     watch_id = db.create_watch(**fields)
     return {"watch": db.get_watch(watch_id)}
@@ -152,6 +176,11 @@ def update_watch(watch_id: int, body: WatchUpdate):
             fields["consecutive_failures"] = 0
     if fields.get("url") is not None and not str(fields["url"]).startswith(("http://", "https://")):
         raise HTTPException(400, "URL must start with http:// or https://")
+    if "filter_json" in fields:
+        # Sent as an object, stored as text. Explicit null clears the filter
+        # back to "everything in the collection".
+        spec = fields["filter_json"]
+        fields["filter_json"] = json.dumps(spec) if spec else None
 
     changed = {k for k in fields if k in RECHECK_FIELDS
                and (fields[k] or None) != (current.get(k) or None)}

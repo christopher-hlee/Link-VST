@@ -7,6 +7,7 @@ out". Conflating those is how monitors silently stop working while looking fine.
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .filters import matches
 from .timeutil import parse, parse_instant, stamp, utcnow
 
 # Stock states. `error` is deliberately NOT one of them — see module docstring.
@@ -91,6 +92,7 @@ def decide(
     failure_threshold: int = 5,
     window_start=None,
     prev_availability: dict | None = None,
+    wanted: dict | None = None,
 ) -> Decision:
     """Fold a check result into a new persisted state plus any events to fire."""
     if result.rate_limited:
@@ -123,7 +125,8 @@ def decide(
     if kind == "collection":
         return _decide_collection(prev_state, prev_baseline, result, events,
                                   window_start=window_start,
-                                  prev_availability=prev_availability)
+                                  prev_availability=prev_availability,
+                                  wanted=wanted)
 
     return _decide_product(prev_state, prev_price, result, events)
 
@@ -181,7 +184,8 @@ def _decide_product(prev_state, prev_price, result, events) -> Decision:
 
 
 def _decide_collection(prev_state, prev_baseline, result, events,
-                       window_start=None, prev_availability=None) -> Decision:
+                       window_start=None, prev_availability=None,
+                       wanted=None) -> Decision:
     handles = list(result.handles or [])
     items = (result.extra or {}).get("items") or {}
     now = utcnow()
@@ -207,11 +211,19 @@ def _decide_collection(prev_state, prev_baseline, result, events,
                                    window_start=start, now=now)
         buckets.setdefault(arrival, []).append(handle)
 
+    # The saved search is applied here, at the point of speaking, and never
+    # to the sweep itself. Everything the collection holds still enters the
+    # baseline and the ledger, so narrowing or widening a filter later cannot
+    # flood you with a catalogue you have already been shown — and an item
+    # listed three weeks ago does not become new because you started wanting
+    # its size today.
+    #
     # ARRIVAL_KNOWN is absorbed in silence: it was already on the shelf, we
     # just had not looked at it. That single line is the whole fix.
     for kind in (ARRIVAL_NEW, ARRIVAL_RELISTED, ARRIVAL_UNCONFIRMED):
         fresh = [h for h in buckets.get(kind, ())
-                 if _worth_waking_someone_for(kind, items.get(h) or {})]
+                 if _worth_waking_someone_for(kind, items.get(h) or {})
+                 and matches(items.get(h) or {}, wanted)]
         if not fresh:
             continue
         payload = {**_prune(_payload(result), fresh),
@@ -236,7 +248,8 @@ def _decide_collection(prev_state, prev_baseline, result, events,
                 if h not in buckets.get(ARRIVAL_NEW, ())
                 and h not in buckets.get(ARRIVAL_RELISTED, ())
                 and h not in buckets.get(ARRIVAL_UNCONFIRMED, ())
-                and _became_buyable(prev_availability, items, h, now)]
+                and _became_buyable(prev_availability, items, h, now)
+                and matches(items.get(h) or {}, wanted)]
     if launched:
         # Released, or restocked? Only the ones we have never seen on sale are
         # releases — and only as far back as we have been watching, which the

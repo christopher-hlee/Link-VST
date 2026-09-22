@@ -36,13 +36,25 @@ def _esc(value) -> str:
     return html.escape(str(value), quote=False)
 
 
-def _money(value) -> str:
+# A yen store read as dollars is wrong by a factor of about 142, and wrong in
+# the direction that makes a 49,160 JPY coat look like a 49,160 USD one.
+SYMBOLS = {"USD": "$", "JPY": "¥", "EUR": "€", "GBP": "£",
+           "CAD": "$", "AUD": "$"}
+
+
+def _symbol(currency) -> str:
+    code = (currency or "USD").upper()
+    return SYMBOLS.get(code, f"{code} ")
+
+
+def _money(value, mark: str = "$") -> str:
     """$185, not $185.0 — Shopify prices are whole numbers far more often than not."""
     try:
         amount = float(value)
     except (TypeError, ValueError):
         return str(value)
-    return f"${amount:,.0f}" if amount == int(amount) else f"${amount:,.2f}"
+    return (f"{mark}{amount:,.0f}" if amount == int(amount)
+            else f"{mark}{amount:,.2f}")
 
 
 def _ago(seconds: int) -> str:
@@ -66,6 +78,7 @@ def render(watch: dict, kind: str, payload: dict) -> str:
     of news, and flattening them into one template makes the important one
     (something is buyable right now) read like the routine ones.
     """
+    mark = _symbol(watch.get("currency"))
     brand = watch.get("brand") or ""
     title = payload.get("title") or watch.get("name") or "Watch"
     price = payload.get("price")
@@ -96,7 +109,7 @@ def render(watch: dict, kind: str, payload: dict) -> str:
         lines.append(f"<b>Held — {_esc(title)}</b>")
         head = f"{_esc(brand)} · " if brand else ""
         if price is not None:
-            head += f"{_money(price)} · "
+            head += f"{_money(price, mark)} · "
         lines.append(f"{head}restocked in <b>{_esc(got)}</b> only. "
                      f"You watch <b>{_esc(want)}</b>, so this is not an alert — "
                      "just a note, sent once.")
@@ -127,6 +140,19 @@ def render(watch: dict, kind: str, payload: dict) -> str:
             if n > 10:
                 lines.append(f"· …and {n - 10} more")
             return "\n".join(lines)
+
+        def line(h):
+            """Name, and price when the store gives one.
+
+            A drop alert without a price makes you open the page to learn
+            whether you care — and on a consignment store, where a listing is
+            one garment that will not come back, that is the expensive kind of
+            curiosity.
+            """
+            entry = (payload.get("items") or {}).get(h) or {}
+            amount = entry.get("price") or entry.get("list_price")
+            name = _esc(titles.get(h) or h)
+            return f"· {name} — {_money(amount, mark)}" if amount else f"· {name}"
 
         arrival = payload.get("arrival") or "new"
         if arrival == "launched":
@@ -169,7 +195,7 @@ def render(watch: dict, kind: str, payload: dict) -> str:
             # reported a 329-day-old product as a new release.
             lines.append("Just listed:")
         for h in handles[:10]:
-            lines.append(f"· {_esc(titles.get(h) or h)}")
+            lines.append(line(h))
         if n > 10:
             lines.append(f"· …and {n - 10} more")
         before = payload.get("baseline_count")
@@ -194,8 +220,8 @@ def render(watch: dict, kind: str, payload: dict) -> str:
         lines.append(f"<b>🏷️ Price drop — {_esc(title)}</b>")
         if brand:
             lines.append(f"<b>{_esc(brand)}</b>")
-        lines.append(f"{_money(payload.get('old_price'))} → "
-                 f"<b>{_money(payload.get('new_price'))}</b>")
+        lines.append(f"{_money(payload.get('old_price'), mark)} → "
+                 f"<b>{_money(payload.get('new_price'), mark)}</b>")
         return "\n".join(lines)
 
     # RESTOCK — two shapes, sized and single-variant.
@@ -215,7 +241,7 @@ def render(watch: dict, kind: str, payload: dict) -> str:
 
     head = f"<b>{_esc(brand)}</b>" if brand else ""
     if price is not None:
-        head = f"{head} · {_money(price)}" if head else _money(price)
+        head = f"{head} · {_money(price, mark)}" if head else _money(price, mark)
     if head:
         lines.append(head)
 

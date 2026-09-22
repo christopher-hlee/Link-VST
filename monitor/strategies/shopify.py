@@ -216,6 +216,14 @@ def _collection_item(base: str, product: dict) -> dict:
         # usual somewhere. Carried so the store's own convention can be read
         # off a real product rather than guessed at.
         "tags": product.get("tags") or [],
+        # On a consignment store the title is useless for reading or for
+        # telling two garments apart — real examples are "yohji yamamoto POUR
+        # HOMME Other" and "GOLDWIN Other". The vendor is the brand, the SKU is
+        # the stable human identifier, and the product type is the only word
+        # describing what the thing is.
+        "vendor": product.get("vendor"),
+        "product_type": product.get("product_type"),
+        "sku": next((v.get("sku") for v in sellable if v.get("sku")), None),
     }
 
 
