@@ -11,11 +11,13 @@ they know, so every update from anywhere else is dropped without a reply —
 silence rather than "not authorised", which would confirm the bot is live.
 """
 import asyncio
+import json
 import logging
 
 from . import db, filters, strategies
 from .config import PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from .fetcher import get_client
+from .timeutil import EPOCH
 from .notify.telegram import API, _esc, configured
 
 log = logging.getLogger(__name__)
@@ -29,6 +31,9 @@ HELP = (
     "/login — a one-tap sign-in link for the dashboard\n"
     "/check &lt;url&gt; — what the monitor can see at that address\n"
     "/status — watches, and when each was last swept\n"
+    "/add &lt;url&gt; — start watching it\n"
+    "/filter &lt;id&gt; &lt;saved-search-url&gt; — narrow a watch\n"
+    "/filter &lt;id&gt; off — widen it back\n"
     "/help — this"
 )
 
@@ -116,9 +121,65 @@ async def _status() -> str:
         seen = f"{len(baseline)} tracked"
         if live is not None and live != len(baseline):
             seen += f" · {live} live"
-        lines.append(f"· {_esc(w['name'])} — {seen} — "
-                     f"swept {_esc(w.get('last_sweep_at') or 'never')}")
+        line = f"<code>{w['id']}</code> {_esc(w['name'])} — {seen}"
+        spec = db.get_filter(w)
+        if spec:
+            line += f"\n    ↳ {_esc(filters.describe(spec))}"
+        lines.append(line)
     return "\n".join(lines)
+
+
+async def _add(url: str) -> str:
+    """Start watching an address, applying any saved search it carries."""
+    if not url.startswith(("http://", "https://")):
+        return "Give me a full URL, starting with https://"
+
+    found = await strategies.detect(url)
+    if not found:
+        return f"Nothing I recognise at {_esc(url)}."
+
+    spec = filters.parse_boost_url(url)
+    watch_id = db.create_watch(
+        name=found.get("name") or url, brand=found.get("brand"), url=url,
+        strategy=found.get("strategy"), kind=found.get("kind") or "product",
+        target_ref=found.get("target_ref"),
+        filter_json=json.dumps(spec) if spec else None,
+        next_check_at=EPOCH)
+    reply = [f"Watching <b>{_esc(found.get('name') or url)}</b> "
+             f"(<code>{watch_id}</code>)."]
+    if spec:
+        reply.append(f"Filter: {_esc(filters.describe(spec))}")
+    reply.append("<i>The first sweep adopts the catalogue in silence — "
+                 "you hear about what arrives after it.</i>")
+    return "\n".join(reply)
+
+
+async def _filter(rest: str) -> str:
+    """Narrow an existing watch to a saved search, or widen it back."""
+    raw_id, _, arg = rest.strip().partition(" ")
+    arg = arg.strip()
+    if not raw_id.isdigit() or not arg:
+        return "Usage: /filter &lt;id&gt; &lt;saved-search-url&gt;  ·  /filter &lt;id&gt; off"
+
+    watch = db.get_watch(int(raw_id))
+    if not watch:
+        return f"No watch {raw_id}. /status lists them."
+
+    if arg.lower() in ("off", "none", "clear"):
+        db.update_watch(watch["id"], filter_json=None)
+        return f"<b>{_esc(watch['name'])}</b> — filter cleared."
+
+    spec = filters.parse_boost_url(arg)
+    if not spec:
+        return ("No filter parameters in that URL. Paste the storefront "
+                "address with its facets still on it.")
+    db.update_watch(watch["id"], filter_json=json.dumps(spec))
+    # Deliberately does NOT rebaseline. The filter decides what is said, not
+    # what has been seen, and replaying a catalogue already shown is what the
+    # baseline exists to prevent.
+    return (f"<b>{_esc(watch['name'])}</b>\n"
+            f"↳ {_esc(filters.describe(spec))}\n"
+            "<i>Applies to what arrives from now on.</i>")
 
 
 async def handle(text: str) -> str | None:
@@ -130,6 +191,10 @@ async def handle(text: str) -> str | None:
         return await _check(rest.strip())
     if command == "/status":
         return await _status()
+    if command == "/add":
+        return await _add(rest.strip())
+    if command == "/filter":
+        return await _filter(rest)
     if command in ("/help", "/start"):
         return HELP
     return None

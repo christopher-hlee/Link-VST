@@ -243,3 +243,75 @@ async def test_an_unknown_command_is_answered_with_silence():
 
 async def test_the_command_suffix_a_group_chat_adds_is_stripped():
     assert await telegram_bot.handle("/help@restockbot") is not None
+
+
+# --- narrowing a watch from the phone --------------------------------------
+
+COMOLI_URL = ("https://ragtag-global.com/collections/men_all"
+              "?pf_st_availability=in-stock"
+              "&pf_t_country_of_manufacture=countryoforigin_Japan"
+              "&pf_t_gender=gender_Mens&pf_t_size=size_L&pf_t_size=size_XL"
+              "&pf_v_brand=COMOLI")
+
+
+def a_watch(**kw):
+    fields = dict(name="ragtag · comoli", brand="ragtag-global.com",
+                  url="https://ragtag-global.com/collections/comoli",
+                  strategy="shopify", kind="collection", target_ref="comoli",
+                  last_state="watching", baseline_json=json.dumps(["a", "b"]))
+    fields.update(kw)
+    return db.create_watch(**fields)
+
+
+async def test_a_saved_search_can_be_applied_to_an_existing_watch():
+    wid = a_watch()
+
+    reply = await telegram_bot.handle(f"/filter {wid} {COMOLI_URL}")
+
+    assert "size_L or size_XL" in reply
+    assert json.loads(db.get_watch(wid)["filter_json"])["vendors"] == ["COMOLI"]
+
+
+async def test_narrowing_a_watch_does_not_replay_its_catalogue():
+    """Changing what you want to hear about is not a reason to re-announce
+    everything already in the collection."""
+    wid = a_watch()
+
+    await telegram_bot.handle(f"/filter {wid} {COMOLI_URL}")
+
+    assert json.loads(db.get_watch(wid)["baseline_json"]) == ["a", "b"]
+
+
+async def test_a_filter_can_be_cleared():
+    wid = a_watch(filter_json=json.dumps({"vendors": ["COMOLI"]}))
+
+    reply = await telegram_bot.handle(f"/filter {wid} off")
+
+    assert "cleared" in reply
+    assert db.get_watch(wid)["filter_json"] is None
+
+
+async def test_a_url_with_no_facets_is_refused_rather_than_silently_stored():
+    """Storing an empty filter would read as "narrowed" while changing
+    nothing — the quiet kind of wrong."""
+    wid = a_watch()
+
+    reply = await telegram_bot.handle(
+        f"/filter {wid} https://ragtag-global.com/collections/comoli")
+
+    assert "No filter parameters" in reply
+    assert db.get_watch(wid)["filter_json"] is None
+
+
+async def test_filtering_an_unknown_watch_says_so():
+    assert "No watch 999" in await telegram_bot.handle(f"/filter 999 {COMOLI_URL}")
+
+
+async def test_status_shows_the_id_and_the_filter_so_both_can_be_checked():
+    wid = a_watch(filter_json=json.dumps(
+        {"vendors": ["COMOLI"], "tag_groups": [["size_L", "size_XL"]]}))
+
+    reply = await telegram_bot._status()
+
+    assert f"<code>{wid}</code>" in reply
+    assert "size_L or size_XL" in reply
