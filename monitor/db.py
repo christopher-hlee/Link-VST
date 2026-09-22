@@ -121,12 +121,16 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_watches_due   ON watches(enabled, next_check_at);
 CREATE INDEX IF NOT EXISTS idx_checks_watch  ON checks(watch_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_events_recent ON events(id DESC);
+
+-- Small odds and ends that are not worth a table each: the Telegram update
+-- offset, the live login token, and the public origin this app is reached on.
+CREATE TABLE IF NOT EXISTS kv (
+    key   TEXT PRIMARY KEY,
+    value TEXT,
+    set_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
-
-# Columns added after the first release. CREATE TABLE IF NOT EXISTS does
-# nothing to a table that already exists, so a live database never gains them
-# without this.
 _ADDED_COLUMNS = {
     "watches": {"last_sweep_at": "TEXT", "availability_json": "TEXT",
                 "last_seen_count": "INTEGER",
@@ -248,6 +252,44 @@ def get_baseline(watch: dict) -> list[str] | None:
         return json.loads(raw)
     except (ValueError, TypeError):
         return None
+
+
+# ------------------------------------------------------------------- kv
+
+def kv_get(key: str) -> str | None:
+    with tx() as conn:
+        row = conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def kv_set(key: str, value: str | None) -> None:
+    with tx() as conn:
+        if value is None:
+            conn.execute("DELETE FROM kv WHERE key = ?", (key,))
+        else:
+            conn.execute(
+                "INSERT INTO kv (key, value, set_at) VALUES (?, ?, datetime('now')) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+                "set_at = excluded.set_at",
+                (key, value))
+
+
+def kv_claim(key: str, expected: str) -> bool:
+    """Delete the row only if it holds exactly this value, atomically.
+
+    True means the caller has claimed it and nobody else can. A conditional
+    delete rather than read-then-delete for two reasons: two requests racing
+    cannot both win, and — the one that matters — a WRONG value must leave the
+    row alone. Deleting on a failed attempt would let anyone who can reach the
+    endpoint destroy a live single-use token by guessing at it, which is a
+    denial of service on someone else's way in.
+    """
+    if not expected:
+        return False
+    with tx() as conn:
+        cur = conn.execute("DELETE FROM kv WHERE key = ? AND value = ?",
+                           (key, expected))
+        return cur.rowcount == 1
 
 
 def get_filter(watch: dict) -> dict | None:

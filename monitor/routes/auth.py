@@ -1,5 +1,6 @@
 """Session login for the dashboard."""
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from .. import security
@@ -24,12 +25,32 @@ def login(body: LoginRequest, response: Response):
     if not security.verify_password(body.password):
         raise HTTPException(401, "Incorrect password")
 
-    response.set_cookie(
-        COOKIE_NAME, security.issue_session(),
-        max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
-        secure=True, path="/",
-    )
+    response.set_cookie(COOKIE_NAME, security.issue_session(), **SESSION_COOKIE)
     return {"ok": True}
+
+
+SESSION_COOKIE = dict(max_age=SESSION_MAX_AGE, httponly=True,
+                      samesite="lax", secure=True, path="/")
+
+
+@router.get("/auth/telegram")
+def telegram_login(t: str = ""):
+    """Redeem a one-tap sign-in link sent to the bot's own chat.
+
+    Redirects rather than returning JSON, because this is opened by tapping a
+    link in a chat app and what should happen next is the dashboard.
+    """
+    if not security.consume_login_token(t):
+        # Deliberately one message for expired, already-used and forged. The
+        # difference is only useful to someone who did not send the link.
+        return HTMLResponse(
+            "<p>That sign-in link has expired or has already been used. "
+            "Send <code>/login</code> to the bot for a fresh one.</p>",
+            status_code=401)
+
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(COOKIE_NAME, security.issue_session(), **SESSION_COOKIE)
+    return response
 
 
 @router.post("/logout")

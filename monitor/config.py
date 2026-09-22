@@ -20,6 +20,9 @@ COOKIE_NAME = "monitor_session"
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "")
+# Public address of this dashboard, for links the bot puts in a chat.
+# Optional: the app learns it from the first inbound request otherwise.
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
 
 # Second channel for alert_level="critical". Free, and its high-priority
 # notifications pierce Do Not Disturb, which Telegram's do not.

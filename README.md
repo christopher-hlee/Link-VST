@@ -480,6 +480,39 @@ nothing succeeded trips the same alarm as a crash.
 Playwright for JS-rendered sites. Auto-checkout is deliberately out of scope:
 this notifies, it doesn't buy.
 
+## Signing in from the chat
+
+A password needs somewhere to type it. A corporate network that routes
+unrecognised domains through browser isolation streams the dashboard as pixels
+and blocks text input, so the password field is unusable while everything
+behind it runs fine. The bot is reachable because it is not a browser.
+
+Send **`/login`** and tap the link. It is signed, expires in ten minutes, and
+is good exactly once.
+
+- The nonce is **claimed** with a conditional delete, not read-then-deleted. A
+  wrong value leaves the live token alone — otherwise anyone reaching the
+  endpoint could lock you out by opening it with nonsense, and an old link
+  re-tapped from the chat log would do it by accident.
+- Minting a new link invalidates the previous one; at most one is ever live.
+- Only the configured chat is obeyed. Anyone can message a bot whose username
+  they know, so every other update is dropped in silence rather than answered
+  with "not authorised", which would confirm the bot is live.
+
+Other commands: **`/check <url>`** reports what a watch on that address would
+actually see — platform, product count, whether it is too large to read in one
+sweep, and any saved-search parameters it would have to apply itself. That is
+the question that otherwise needs a shell on the server, which is exactly what
+is unavailable when a network sits between you and the dashboard.
+**`/status`** lists watches and when each was last swept.
+
+Long polling, not a webhook: a webhook needs a public URL registered with
+Telegram and a secret in the environment, and editing the environment on the
+server is the thing that is hard to reach. The bot token is already there.
+The app learns its own public address from the first inbound request, since it
+listens on localhost behind a proxy and the hostname lives in the proxy config
+(`PUBLIC_URL` overrides).
+
 ## Adding a store whose filters are not Shopify's
 
 Some stores run faceted search through a third party — RAGTAG Global runs Boost

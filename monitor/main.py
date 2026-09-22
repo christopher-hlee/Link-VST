@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import db, scheduler, security
+from . import db, scheduler, security, telegram_bot
 from .config import API_KEY, COOKIE_NAME
 from .fetcher import close_client
 from .routes import auth, detect, events, inspect, watches
@@ -35,9 +35,11 @@ async def lifespan(app: FastAPI):
     if renamed:
         log.info("renamed %d watch(es) that were showing a raw URL", renamed)
     scheduler.start()
+    telegram_bot.start()
     try:
         yield
     finally:
+        await telegram_bot.shutdown()
         scheduler.shutdown()
         await close_client()
 
@@ -49,12 +51,16 @@ app = FastAPI(title="Restock Monitor", version=VERSION, lifespan=lifespan)
 
 PUBLIC_PATHS = {"/health", "/", "/favicon.ico",
                 "/api/login", "/api/logout", "/api/me",
+                # Carries its own single-use signed token; requiring a session
+                # to reach the thing that grants a session is a closed loop.
+                "/api/auth/telegram",
                 "/docs", "/openapi.json"}
 
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
+    _remember_origin(request)
     if path in PUBLIC_PATHS or path.startswith("/static/"):
         return await call_next(request)
 
@@ -75,6 +81,27 @@ async def auth_middleware(request: Request, call_next):
             status_code=503,
         )
     return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
+
+def _remember_origin(request: Request) -> None:
+    """Record the public URL this app is reached on.
+
+    The bot has to put an absolute link in a chat message, and the app has no
+    other way to learn its own address: it listens on localhost behind a proxy,
+    and the hostname lives in the proxy's config. Every inbound request carries
+    it, so the first visit to the dashboard teaches it permanently. PUBLIC_URL
+    overrides this when set.
+    """
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not host or host.startswith(("localhost", "127.0.0.1")):
+        return
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    origin = f"{scheme}://{host}"
+    try:
+        if db.kv_get("public_origin") != origin:
+            db.kv_set("public_origin", origin)
+    except Exception:          # never fail a request over a convenience
+        pass
 
 
 @app.exception_handler(HTTPException)
