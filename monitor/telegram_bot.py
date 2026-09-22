@@ -13,6 +13,7 @@ silence rather than "not authorised", which would confirm the bot is live.
 import asyncio
 import json
 import logging
+import re
 
 from . import db, filters, strategies
 from .config import PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -69,14 +70,36 @@ async def _login() -> str:
             "Good once, for ten minutes. Asking again cancels this one.")
 
 
+def _bad_url(url: str) -> str | None:
+    """Why this address cannot be watched, or None if it can.
+
+    A search results page is the case worth catching: Shopify's search is not
+    exposed through the API, so a watch built from `/search?q=auralee` polls
+    the whole catalogue and ignores the term — returning products, reporting
+    healthy, and answering a different question than the one asked.
+    """
+    if not url.startswith(("http://", "https://")):
+        return "Give me a full URL, starting with https://"
+    term = strategies.shopify.search_query(url)
+    if not term:
+        return None
+    slug = re.sub(r"[^a-z0-9]+", "", term.lower())
+    return (f"That is a search results page. Shopify's search is not in the "
+            f"API, so a watch built from it would poll the whole catalogue "
+            f"and quietly ignore \u201c{_esc(term)}\u201d.\n"
+            f"Try <code>/collections/{slug}</code>, or watch a collection and "
+            f"filter by vendor.")
+
+
 async def _check(url: str) -> str:
     """What would a watch on this address actually see?
 
     The question that otherwise needs a shell on the server, which is exactly
     what is unavailable when a network sits between you and the dashboard.
     """
-    if not url.startswith(("http://", "https://")):
-        return "Give me a full URL, starting with https://"
+    refusal = _bad_url(url)
+    if refusal:
+        return refusal
 
     spec = filters.parse_boost_url(url)
     found = await strategies.detect(url)
@@ -131,8 +154,9 @@ async def _status() -> str:
 
 async def _add(url: str) -> str:
     """Start watching an address, applying any saved search it carries."""
-    if not url.startswith(("http://", "https://")):
-        return "Give me a full URL, starting with https://"
+    refusal = _bad_url(url)
+    if refusal:
+        return refusal
 
     found = await strategies.detect(url)
     if not found:

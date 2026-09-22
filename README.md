@@ -524,6 +524,13 @@ AI Search & Discovery — and encode a saved search in the storefront URL:
   &pf_v_brand=COMOLI
 ```
 
+A **search results page** is refused outright. `/search?q=auralee` is a fine
+way for a person to find a brand and a trap for a monitor: Shopify's search is
+not exposed through the API, so a watch built from it polls the whole
+catalogue and ignores the term — returning products, reporting healthy, and
+answering a different question than the one asked. Use `/collections/<handle>`,
+or watch a collection and filter by vendor.
+
 **Those parameters have no effect on `products.json`.** Handing the URL to
 Shopify returns the whole unfiltered collection — which looks like it is
 working while being wrong, the worst failure available. So the filter is

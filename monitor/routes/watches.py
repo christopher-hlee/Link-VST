@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 import json
+import re
 
 from .. import db, filters, scheduler, strategies
 from ..config import (BESTBUY_API_KEY, INTERVAL_BASE, INTERVAL_HOT,
@@ -13,6 +14,9 @@ from ..statemachine import UNKNOWN
 from ..timeutil import EPOCH, stamp_in
 
 router = APIRouter()
+
+SEARCH_URL_MESSAGE = (
+    "That is a search results page, and Shopify's search is not available through the API — a watch built from it would poll the whole catalogue and ignore \u201c{q}\u201d, which looks like it is working. Use the collection for it (try /collections/{slug}), or watch a collection and filter by vendor.")
 
 TIERS = {"slow": INTERVAL_SLOW, "base": INTERVAL_BASE, "fast": INTERVAL_HOT}
 
@@ -116,6 +120,11 @@ async def create_watch(body: WatchCreate):
     tier = fields.pop("tier", "base")
     if tier not in TIERS:
         raise HTTPException(400, f"tier must be one of {sorted(TIERS)}")
+
+    term = strategies.shopify.search_query(body.url)
+    if term:
+        raise HTTPException(422, SEARCH_URL_MESSAGE.format(
+            q=term, slug=re.sub(r"[^a-z0-9]+", "", term.lower())))
 
     # Sniff the platform unless the caller pinned one explicitly.
     if not body.strategy:

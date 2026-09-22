@@ -12,7 +12,7 @@ Falls back to the Atom feed when products.json is gated, which some stores do.
 import json
 import re
 import xml.etree.ElementTree as ET
-from urllib.parse import quote, urlparse, urlunparse
+from urllib.parse import parse_qsl, quote, urlparse, urlunparse
 
 from ..fetcher import fetch
 from ..statemachine import CheckResult, HELD, IN_STOCK, OUT_OF_STOCK
@@ -63,6 +63,23 @@ def _slug(handle) -> str:
     hand the link to is obliged to be as forgiving.
     """
     return quote(str(handle or ""), safe="")
+
+
+def search_query(url: str) -> str | None:
+    """The search term, if this is a search results page rather than a place.
+
+    Shopify's search is not exposed through the API. A watch built from
+    `/search?q=auralee` would poll the whole catalogue and ignore the term
+    entirely — returning results, looking healthy, and answering a different
+    question than the one asked. Worth catching at the door, because the
+    failure is invisible from the outside.
+    """
+    parsed = urlparse(url)
+    if parsed.path.rstrip("/").endswith("/search") or parsed.path == "/search":
+        for key, value in parse_qsl(parsed.query):
+            if key == "q" and value.strip():
+                return value.strip()
+    return None
 
 
 def cart_url(base: str, variant_id) -> str:
