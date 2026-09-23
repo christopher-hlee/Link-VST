@@ -480,6 +480,27 @@ nothing succeeded trips the same alarm as a crash.
 Playwright for JS-rendered sites. Auto-checkout is deliberately out of scope:
 this notifies, it doesn't buy.
 
+## Checking the layout
+
+```
+python3 ui-check.py
+```
+
+A real browser at 375, 430, 820 and 1280px, asserting the things that have
+actually broken: no sideways scroll, no row wrapping pathologically, no
+"Invalid Date" or stray `undefined`, and tap targets at least 44px.
+
+It is not in `pytest monitor/tests` on purpose — the deploy gate runs the
+suite on the server, where there is no Chromium, and a gate that cannot run is
+a gate that blocks.
+
+It seeds the rows that have broken the layout rather than tidy ones. The bug
+it exists for: a watch status grew to *"Watching · 739 tracked · 733 in the
+feed now"*, took its `auto` grid track with it, left the name column about one
+character wide, and `overflow-wrap:anywhere` did as it was told — breaking
+`satisfyrunning.com all products` one letter per line down the whole screen. A
+490px row that any test asserting "the text is present" would have passed.
+
 ## Signing in from the chat
 
 A password needs somewhere to type it. A corporate network that routes

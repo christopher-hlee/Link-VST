@@ -184,8 +184,15 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   .name{font-size:24px}
   .actions{justify-content:flex-start}
   .caption{text-align:left}
-  .wait{grid-template-columns:minmax(0,1fr) auto auto;gap:8px 10px}
-  .wait .n{overflow-wrap:anywhere}
+  /* Two lines, not three columns. The status sits in an `auto` track, so it
+     takes whatever width its text needs and the name gets the remainder — and
+     when the status grew to "Watching · 739 tracked · 733 in the feed now"
+     the remainder was about one character wide. `overflow-wrap:anywhere` then
+     did as it was told and broke the name one letter per line, down the whole
+     screen. Giving the name its own full-width row means nothing competes
+     with it for space, whatever the status ends up saying. */
+  .wait{grid-template-columns:minmax(0,1fr) auto;gap:6px 10px}
+  .wait .n{grid-column:1/-1;overflow-wrap:anywhere}
   .wait .p,.wait .t{display:none}
   .fired{grid-template-columns:1fr 84px 44px;gap:8px 10px}
   /* The price column used to be dropped entirely here. That is survivable for
@@ -199,9 +206,8 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
      Wrapping costs a line and keeps the row readable. */
   .feed .fw{grid-column:1/-1;white-space:normal;overflow:visible}
   .feed .x{grid-row:1;grid-column:3}
-  /* Long brand + title cannot shrink in an `auto` track, so the status span
-     pushed the whole page sideways. */
-  .wait .s{justify-self:end;text-align:right}
+  .wait .s{grid-column:1;justify-self:start;text-align:left}
+  .wait .wa{grid-column:2;justify-self:end}
   .sheet{padding:24px 18px}
   .intent{grid-template-columns:22px 1fr;gap:12px}
   .intent .ex{display:none}
