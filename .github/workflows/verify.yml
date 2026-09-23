@@ -75,12 +75,25 @@ jobs:
           echo "committed here : $want_build"
           echo "serving there  : $live_build"
 
-          # The layout fix, read straight out of the deployed stylesheet.
+          # The layout rules, read straight out of the deployed stylesheet.
+          echo "::group::mobile .wait rules, as served"
+          grep -o '\.wait[^}]*}' page.html | grep -E 'grid-|\.n\{|\.s\{|\.wa\{' || true
+          echo "::endgroup::"
+
           if grep -q '\.wait \.n{grid-column:1/-1' page.html; then
             echo "layout fix     : PRESENT in the served page"
           else
             echo "layout fix     : ABSENT from the served page"
             fail=1
+          fi
+
+          # And the shape that produced the bug must be gone, not merely
+          # accompanied. A botched merge could leave both.
+          if grep -q 'minmax(0,1fr) auto auto' page.html; then
+            echo "old 3-col rule : STILL PRESENT — it would win if it comes later"
+            fail=1
+          else
+            echo "old 3-col rule : gone"
           fi
 
           if curl -sS --max-time 20 -D - -o /dev/null "$SITE/" 2>/dev/null \

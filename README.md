@@ -498,6 +498,25 @@ answer that does not involve reading a stylesheet through a screenshot.
 
 ## Checking the layout
 
+Two different questions, and confusing them cost several rounds of "still
+broken" against a fix that was already committed:
+
+| question | answered by |
+|---|---|
+| Is the layout right in the code? | `ui-check.py`, a real browser at five widths |
+| Is that code what the server serves? | the `verify` workflow, from a runner that can reach the VPS |
+
+The second was answerable nowhere. This development container cannot reach the
+VPS, so the only evidence available was a photograph of a phone — which cannot
+distinguish "the fix is wrong" from "your browser kept the old page". An
+Actions runner has ordinary internet access, so it looks: it reports the
+running build against the committed one, greps the served page for the layout
+rule itself, checks the old rule is gone, and checks the cache header. No
+credentials — `GET /` serves the same document signed in or not, and `/health`
+is public.
+
+
+
 ```
 python3 ui-check.py
 ```
