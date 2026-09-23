@@ -33,10 +33,11 @@ jobs:
       - run: playwright install --with-deps chromium
       - name: unit tests
         run: python -m pytest monitor/tests -q
+      # No PLAYWRIGHT_BROWSERS_PATH: `playwright install` above puts chromium
+      # in its default location, and pointing the runtime somewhere else is
+      # how this step silently found nothing and passed in 0 seconds.
       - name: browser layout check
         run: python ui-check.py
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: "0"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -62,14 +62,36 @@ def seed():
     return db
 
 
+# A skip is a lie when someone is relying on the answer. Locally, no browser
+# means "cannot check"; in CI it means the check did not happen while the job
+# went green — which is the failure this whole file exists to catch, committed
+# by the file itself. GitHub sets CI=true.
+STRICT = bool(os.environ.get("CI") or os.environ.get("UI_CHECK_STRICT"))
+
+
+def launch(pw):
+    """Chromium, wherever this machine keeps it.
+
+    The development container pins one at /opt/pw-browsers; a CI runner has
+    Playwright install its own and expects to be left to find it. Hardcoding
+    the first path made the second skip silently.
+    """
+    pinned = pathlib.Path("/opt/pw-browsers/chromium")
+    if pinned.exists():
+        print(f"  browser: {pinned}")
+        return pw.chromium.launch(executable_path=str(pinned))
+    print("  browser: playwright default")
+    return pw.chromium.launch()
+
+
 def main() -> int:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
+        if STRICT:
+            print("playwright is not installed, and CI must not pass without "
+                  "running the check"); return 1
         print("playwright not installed — skipping"); return 0
-    chromium = "/opt/pw-browsers/chromium"
-    if not pathlib.Path(chromium).exists():
-        print(f"no chromium at {chromium} — skipping"); return 0
 
     seed()
     import uvicorn
@@ -80,8 +102,14 @@ def main() -> int:
     time.sleep(2.5)
 
     failures = []
+    checked = 0
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=chromium)
+        try:
+            browser = launch(pw)
+        except Exception as exc:
+            if STRICT:
+                print(f"could not start a browser: {exc}"); return 1
+            print(f"could not start a browser ({exc}) — skipping"); return 0
         for label, width in WIDTHS:
             ctx = browser.new_context(viewport={"width": width, "height": 900})
             page = ctx.new_page()
@@ -124,11 +152,16 @@ def main() -> int:
                         fail(f"tap target {size}px, under {MIN_TAP}px")
 
             page.screenshot(path=f"/tmp/ui-{label}.png", full_page=True)
+            checked += 1
             print(f"  {label:10} {width:>5}px  ok" if not failures
                   else f"  {label:10} {width:>5}px  checked")
             page.close(); ctx.close()
         browser.close()
     server.should_exit = True
+
+    if not checked:
+        print("\nFAILED: no width was actually measured")
+        return 1
 
     if failures:
         print("\nFAILED:")

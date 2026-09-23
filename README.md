@@ -525,6 +525,13 @@ A real browser at 375, 430, 820 and 1280px, asserting the things that have
 actually broken: no sideways scroll, no row wrapping pathologically, no
 "Invalid Date" or stray `undefined`, and tap targets at least 44px.
 
+In CI it refuses to skip. On a developer's machine "no browser installed"
+reasonably means "cannot check"; in CI it meant the check did not happen while
+the job went green — which it did, silently, for four runs, because the script
+hardcoded this container's browser path and a runner keeps its elsewhere. A
+green tick that checked nothing is the exact failure this file exists to
+catch, committed by the file itself.
+
 It is not in `pytest monitor/tests` on purpose — the deploy gate runs the
 suite on the server, where there is no Chromium, and a gate that cannot run is
 a gate that blocks.
