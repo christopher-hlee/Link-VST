@@ -496,6 +496,18 @@ anyone remembering to bump a version.
 `GET /health` reports the commit answering, so *"is my fix live?"* has an
 answer that does not involve reading a stylesheet through a screenshot.
 
+## Before pushing
+
+```
+git config core.hooksPath .githooks      # once
+```
+
+The pre-push hook runs the suite and refuses a red tree. Twice a failing suite
+reached the remote because the checking command piped pytest into `tail`,
+which makes `&&` read tail's exit status rather than pytest's — both times
+blocking the deploy gate and emailing the repository owner about it. Care is
+not a mechanism. `git push --no-verify` overrides it deliberately.
+
 ## Checking the layout
 
 Two different questions, and confusing them cost several rounds of "still

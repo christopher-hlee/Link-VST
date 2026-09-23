@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Refuse to push a red tree.
+#
+# Twice now a failing suite reached the remote because the checking command
+# piped pytest into `tail` — which makes `&&` read tail's exit status, not
+# pytest's. Both times it blocked the deploy gate and emailed the repository
+# owner about it. Care is not a mechanism; this is.
+#
+# Install once:  git config core.hooksPath .githooks
+# Bypass:        git push --no-verify   (for a branch you know is broken)
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -n "${SKIP_PREPUSH:-}" ]; then
+  echo "pre-push: skipped (SKIP_PREPUSH set)"
+  exit 0
+fi
+
+echo "pre-push: running the suite…"
+if ! python3 -m pytest monitor/tests -q > /tmp/prepush.log 2>&1; then
+  echo
+  echo "pre-push: REFUSED — tests are failing."
+  tail -15 /tmp/prepush.log
+  echo
+  echo "Fix them, or push with --no-verify if you mean it."
+  exit 1
+fi
+
+tail -1 /tmp/prepush.log
+echo "pre-push: ok"
