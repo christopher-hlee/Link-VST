@@ -101,6 +101,15 @@ jobs:
             echo "old 3-col rule : gone"
           fi
 
+          # Reported, not enforced: the deploy runs on a timer, so the push
+          # that adds a feature is checked before the box has pulled it. A
+          # manual re-run of this workflow a few minutes later is the proof.
+          if grep -q '\.bucket{' page.html && grep -q 'class="dock"' page.html; then
+            echo "grouped drops  : served (buckets, phone dock)"
+          else
+            echo "grouped drops  : not served yet — deploy pending"
+          fi
+
           if curl -sS --max-time 20 -D - -o /dev/null "$SITE/" 2>/dev/null \
              | grep -qi '^cache-control: *no-cache'; then
             echo "cache header   : no-cache (browsers must revalidate)"

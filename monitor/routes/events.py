@@ -24,6 +24,20 @@ def delete_event(event_id: int):
     return {"ok": True}
 
 
+@router.delete("/events/{event_id}/items/{handle:path}")
+def dismiss_item(event_id: int, handle: str):
+    """Dismiss one product from an alert that found several.
+
+    The dashboard lists products, not alerts, so this is what its per-item
+    delete means; dismissing the whole event would take the other products
+    found in the same sweep with it.
+    """
+    outcome = db.drop_event_item(event_id, handle)
+    if outcome is None:
+        raise HTTPException(404, "No such item in that alert")
+    return {"ok": True, "event": outcome}
+
+
 @router.delete("/events")
 def clear_events():
     return {"ok": True, "deleted": db.clear_events()}

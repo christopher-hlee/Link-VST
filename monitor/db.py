@@ -400,6 +400,59 @@ def delete_event(event_id: int) -> bool:
         return cur.rowcount > 0
 
 
+# Per-product maps inside a stored event, mirroring statemachine._prune.
+_EVENT_ITEM_KEYS = ("titles", "links", "items")
+
+
+def drop_event_item(event_id: int, handle: str) -> str | None:
+    """Dismiss one product from an alert, leaving any others it carried.
+
+    One sweep can find several products and stores them as a single event, so
+    deleting the event to dismiss one of them silently takes its siblings too.
+    Returns "pruned", "deleted" (it was the last one), or None when there was
+    no such event or the event never mentioned this product.
+
+    Compare-and-swap on the stored payload rather than a read then a blind
+    write: a phone and a laptop dismissing two items of the same event at once
+    must not resurrect each other's.
+    """
+    for _ in range(5):
+        with tx() as conn:
+            row = conn.execute("SELECT payload_json FROM events WHERE id=?",
+                               (event_id,)).fetchone()
+            if row is None:
+                return None
+            raw = row["payload_json"]
+            try:
+                payload = json.loads(raw or "{}")
+            except (ValueError, TypeError):
+                return None
+            handles = payload.get("handles") or []
+            if handle not in handles:
+                return None
+            left = [h for h in handles if h != handle]
+            if not left:
+                cur = conn.execute(
+                    "DELETE FROM events WHERE id=? AND payload_json IS ?",
+                    (event_id, raw))
+                if cur.rowcount:
+                    return "deleted"
+                continue
+            payload["handles"] = left
+            for key in _EVENT_ITEM_KEYS:
+                if isinstance(payload.get(key), dict):
+                    payload[key].pop(handle, None)
+            if isinstance(payload.get("first_sale"), list):
+                payload["first_sale"] = [h for h in payload["first_sale"]
+                                         if h != handle]
+            cur = conn.execute(
+                "UPDATE events SET payload_json=? WHERE id=? AND payload_json IS ?",
+                (json.dumps(payload), event_id, raw))
+            if cur.rowcount:
+                return "pruned"
+    return None
+
+
 def clear_events() -> int:
     """Drop the whole alert history. Returns how many rows went."""
     with tx() as conn:

@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#100f0d">
 <title>Restock</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -34,11 +35,24 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .mono{font-family:var(--mono)}
 
 .hdr{padding:34px 44px 24px;display:flex;align-items:flex-end;
-  justify-content:space-between;gap:40px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  justify-content:space-between;gap:24px 40px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.hdr-title{display:flex;flex-direction:column;gap:8px;min-width:0}
 .hdr h1{font-family:var(--serif);font-size:32px;line-height:1;color:var(--bright);
   font-weight:400;margin:0}
-.counts{display:flex;align-items:center;gap:26px;font-size:11px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--muted);flex-wrap:wrap}
+.hdr-side{display:flex;align-items:flex-end;gap:36px;flex-wrap:wrap}
+.hdr-actions{display:flex;gap:10px}
+/* Counts as figures, not a sentence. A run of uppercase words wrapped at
+   whatever width the phone happened to be, so "18 JUST DROPPED" split across
+   lines and the numbers stopped lining up with anything. */
+.counts{display:flex;gap:28px}
+.stat{display:flex;flex-direction:column;gap:6px;min-width:0}
+.stat b{font-family:var(--serif);font-size:24px;line-height:1;font-weight:400;color:var(--text-dim)}
+.stat span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat.ok b{color:var(--in-stock)}
+.stat.bad b{color:var(--failing)}
+.stat.zero b{color:var(--faint)}
+.dock{display:none}
 
 .btn-ghost{background:none;border:1px solid var(--rule);color:var(--text);font-size:11px;
   letter-spacing:.14em;text-transform:uppercase;padding:12px 18px;transition:border-color .1s,color .1s}
@@ -50,6 +64,8 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .btn-text{background:none;border:none;padding:0;font-size:11px;letter-spacing:.14em;
   text-transform:uppercase;transition:color .1s}
 .btn-text:hover{color:var(--bright)}
+a.btn-text{display:inline-flex;align-items:center;text-decoration:none}
+.item-main .k .tag{margin-left:0}
 
 .body{padding:0 44px 40px;display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:104px 1fr 300px;gap:28px;align-items:center;
@@ -62,7 +78,11 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .shot.sm{height:96px}
 .name{font-family:var(--serif);font-size:30px;line-height:1;color:var(--bright);font-weight:400}
 .name.sm{font-size:24px}
-.meta{font-size:12px;color:var(--held)}
+.meta{font-size:12px;color:var(--held);overflow-wrap:anywhere}
+/* A grid or flex child defaults to the width of its longest unbreakable
+   string, and a failing watch's error is a URL with no break in it: the row
+   pushed 124px past a phone's edge. */
+.row > *{min-width:0}
 .meta b{color:var(--bright);font-weight:400}
 
 .chips{display:flex;gap:8px}
@@ -105,10 +125,11 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .fired .fi a:hover{color:var(--accent)}
 .fired .fi .k{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.18em;
   text-transform:uppercase;color:var(--dim);margin-bottom:3px}
-.fired .tag{margin-left:9px;padding:1px 6px;border:1px solid var(--dim);color:var(--held);
-  letter-spacing:.14em}
-.fired .tag.now{border-color:var(--accent);color:var(--accent)}
-.fired .star{color:var(--accent);letter-spacing:0}
+.tag{margin-left:9px;padding:1px 6px;border:1px solid var(--dim);color:var(--held);
+  letter-spacing:.14em;white-space:nowrap}
+.tag.now{border-color:var(--accent);color:var(--accent)}
+.tag.soon{border-color:var(--no-baseline);color:var(--no-baseline)}
+.star{color:var(--accent);letter-spacing:0}
 .fired .fp{font-family:var(--serif);font-size:15px;color:var(--muted)}
 .fired .ft{font-size:11px;color:var(--faint)}
 /* Detection lag. Amber past five minutes, because that is the point at which
@@ -122,6 +143,68 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .x{background:none;border:1px solid transparent;color:var(--dim);font-size:19px;
   line-height:1;width:34px;height:34px;transition:color .1s,border-color .1s}
 .x:hover{color:var(--failing);border-color:var(--failing)}
+/* ---------- drops, one bucket per watch ----------
+   Twenty rows from one store read as twenty separate events when they are one
+   fact: that store has things you can buy. The list says that once per watch
+   and the sheet behind it holds the items. */
+.bucket{display:grid;grid-template-columns:92px minmax(0,1fr) auto;gap:22px;align-items:center;
+  width:100%;margin:0;padding:14px 0;background:none;border:0;
+  border-top:1px solid var(--rule-faint);color:inherit;text-align:left;transition:background .1s}
+.bucket:last-child{border-bottom:1px solid var(--rule-faint)}
+.bucket:hover{background:var(--surface-quiet)}
+.bucket:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+.bk-main{display:flex;flex-direction:column;gap:5px;min-width:0}
+.bk-main .k,.item-main .k{font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--dim);overflow-wrap:anywhere}
+.bk-name{font-family:var(--serif);font-size:21px;line-height:1.15;color:var(--bright);
+  overflow-wrap:anywhere}
+.bk-meta{font-size:12px;color:var(--held)}
+.bk-meta b{color:var(--in-stock);font-weight:500}
+.bk-go{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  white-space:nowrap}
+.bk-go i{font-style:normal;font-size:18px;letter-spacing:0;padding-left:6px}
+.bucket:hover .bk-go{color:var(--accent)}
+
+/* A product photo, or the hatch every empty image slot already uses. */
+.tn{display:block;position:relative;overflow:hidden;flex:none;
+  background:repeating-linear-gradient(135deg,#191713 0 6px,#151310 6px 12px)}
+.tn img{display:block;width:100%;height:100%;object-fit:cover}
+/* Up to three photos fanned like a hand of cards: the newest on top, the
+   others showing an edge. Enough to recognise a drop without opening it. */
+.deck{position:relative;width:92px;height:64px}
+.deck .tn{position:absolute;top:0;width:64px;height:64px;outline:1px solid var(--ground)}
+.deck .tn:nth-child(1){left:0;z-index:3}
+.deck .tn:nth-child(2){left:14px;z-index:2;filter:brightness(.7)}
+.deck .tn:nth-child(3){left:28px;z-index:1;filter:brightness(.5)}
+
+.sheet.bucket-sheet{max-width:820px;max-height:calc(100vh - 80px);overflow-y:auto;
+  overscroll-behavior:contain;padding-top:0}
+.sheet-head{position:sticky;top:0;z-index:2;background:var(--ground);display:flex;
+  align-items:flex-start;justify-content:space-between;gap:16px;padding:28px 0 16px;
+  border-bottom:1px solid var(--border)}
+.sheet-head h2{overflow-wrap:anywhere;margin:4px 0 6px}
+.sheet-head .sub{margin:0}
+.sheet-head .x{width:44px;height:44px;flex:none}
+.bucket-sheet .sheet-actions{position:sticky;bottom:0;z-index:2;background:var(--ground);
+  margin-top:0;padding:18px 0 22px}
+.items{display:flex;flex-direction:column}
+.item{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:18px;align-items:center;
+  padding:16px 0;border-top:1px solid var(--rule-faint)}
+.item:first-child{border-top:0}
+.item .tn{width:76px;height:76px}
+.item-main{display:flex;flex-direction:column;gap:5px;min-width:0}
+.item-title{font-family:var(--serif);font-size:17px;line-height:1.3;color:var(--bright);
+  text-decoration:none;overflow-wrap:anywhere}
+a.item-title:hover{color:var(--accent)}
+.item-meta{font-size:12px;color:var(--muted);line-height:1.5}
+.item-meta .price{font-family:var(--serif);font-size:15px;color:var(--text)}
+.item-meta .lag{color:var(--held)}
+.item-meta .lag.slow{color:var(--armed)}
+.item-acts{display:flex;gap:8px;align-items:center}
+.item-acts .chip{flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:auto;min-width:76px;padding:0 16px;min-height:44px;text-decoration:none}
+.item-acts .x{width:44px;height:44px}
+
 .feed{display:grid;grid-template-columns:96px 150px 1fr 26px;gap:18px;align-items:baseline;
   padding:11px 0;border-top:1px solid var(--rule-faint)}
 .feed .fw{font-size:12px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;
@@ -175,15 +258,65 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   .row{grid-template-columns:80px 1fr 240px;gap:20px}
   .name{font-size:26px}
 }
+/* ---------- the phone ----------
+   Its own layout, not the desktop one squeezed. Three rules drive it:
+
+   1. One column, and every row is two lines at most: what it is, then its
+      state. Nothing shares a line with a field that can grow, which is how the
+      name once ended up one letter wide and 490px tall.
+   2. The two things you come here to do — add a watch, ask why something
+      did not alert — sit in a dock at the bottom, where the thumb is, instead
+      of wrapping somewhere in the header.
+   3. Sheets rise from the bottom and scroll inside themselves, with their
+      primary button pinned in reach. Inputs are 16px, because iOS zooms the
+      whole page into anything smaller and never zooms back out — the
+      "spacing is all off" that followed every form. */
 @media (max-width:820px){
-  .hdr{padding:20px 16px 14px;gap:16px}
-  .hdr h1{font-size:26px}
-  .body{padding:0 16px 32px}
-  .row{grid-template-columns:1fr;gap:14px;padding:20px 0}
-  .shot{height:80px;max-width:120px}
-  .name{font-size:24px}
+  .hdr{display:block;padding:18px max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left))}
+  .hdr-title{gap:6px}
+  .hdr h1{font-size:27px}
+  .hdr-side{display:block}
+  .hdr-actions{display:none}
+  .counts{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:0;
+    margin-top:16px;border:1px solid var(--border)}
+  .stat{padding:11px 10px 10px;border-left:1px solid var(--border);gap:7px}
+  .stat:first-child{border-left:0}
+  .stat b{font-size:22px}
+  /* Five figures share 343px on the smallest phone. Spaced capitals need
+     about 56px for "Buyable" and the cell has 48, so here the labels drop
+     to plain words rather than an ellipsis. */
+  .stat span{font-size:11px;letter-spacing:0;text-transform:none}
+
+  .body{padding:0 max(16px,env(safe-area-inset-right)) calc(100px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+  .group-label{padding:24px 0 10px}
+
+  .dock{display:flex;gap:10px;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    padding:10px max(16px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+    background:rgba(16,15,13,.97);border-top:1px solid var(--border)}
+  .dock button{min-height:48px;padding:0 12px}
+  .dock .btn-ghost{flex:1}
+  .dock .btn-accent{flex:1.3}
+  .toast{bottom:calc(88px + env(safe-area-inset-bottom));width:calc(100% - 32px);max-width:none}
+
+  .bucket{grid-template-columns:78px minmax(0,1fr) 16px;gap:14px;padding:14px 0}
+  .deck{width:78px;height:58px}
+  .deck .tn{width:58px;height:58px}
+  .deck .tn:nth-child(2){left:10px}
+  .deck .tn:nth-child(3){left:20px}
+  .bk-name{font-size:19px}
+  .bk-go span{display:none}
+  .bk-go i{font-size:22px;padding:0;color:var(--muted)}
+
+  /* Product rows: photo beside the words, actions across the full width
+     below them where a thumb can reach every chip. */
+  .row{grid-template-columns:72px minmax(0,1fr);gap:12px 14px;padding:18px 0;align-items:start}
+  .row > :last-child{grid-column:1/-1}
+  .shot,.shot.sm{height:72px}
+  .name{font-size:22px}
+  .name.sm{font-size:20px}
   .actions{justify-content:flex-start}
   .caption{text-align:left}
+
   /* Two lines, not three columns. The status sits in an `auto` track, so it
      takes whatever width its text needs and the name gets the remainder — and
      when the status grew to "Watching · 739 tracked · 733 in the feed now"
@@ -191,9 +324,12 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
      did as it was told and broke the name one letter per line, down the whole
      screen. Giving the name its own full-width row means nothing competes
      with it for space, whatever the status ends up saying. */
-  .wait{grid-template-columns:minmax(0,1fr) auto;gap:6px 10px}
-  .wait .n{grid-column:1/-1;overflow-wrap:anywhere}
+  .wait{grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:12px 0}
+  .wait .n{grid-column:1/-1;overflow-wrap:anywhere;font-size:15px}
+  .wait .n .k{display:block;padding:0 0 3px}
   .wait .p,.wait .t{display:none}
+  .wait .s{grid-column:1;justify-self:start;text-align:left}
+  .wait .wa{grid-column:2;justify-self:end}
   .fired{grid-template-columns:1fr 84px 44px;gap:8px 10px}
   /* The price column used to be dropped entirely here. That is survivable for
      a sticker price and not for a landed cost, which is the number the whole
@@ -206,16 +342,42 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
      Wrapping costs a line and keeps the row readable. */
   .feed .fw{grid-column:1/-1;white-space:normal;overflow:visible}
   .feed .x{grid-row:1;grid-column:3}
-  .wait .s{grid-column:1;justify-self:start;text-align:left}
-  .wait .wa{grid-column:2;justify-self:end}
-  .sheet{padding:24px 18px}
+
+  /* Sheets rise from the bottom and scroll inside themselves. */
+  .overlay{align-items:flex-end;padding:0;overflow:hidden}
+  .sheet,.sheet.bucket-sheet{max-width:none;max-height:calc(100vh - 36px);max-height:calc(100dvh - 36px);
+    overflow-y:auto;overscroll-behavior:contain;border:0;border-top:1px solid var(--rule);
+    padding:0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
+  .sheet::before{content:'';display:block;width:36px;height:3px;background:var(--faint);margin:10px auto 16px}
+  .sheet h2{font-size:24px}
+  .sheet .sub{font-size:13px}
+  .sheet-actions{position:sticky;bottom:0;z-index:2;background:var(--ground);gap:10px 18px;
+    margin-top:22px;padding:14px 0 calc(14px + env(safe-area-inset-bottom))}
+  .sheet-head{padding:4px 0 14px}
+  .bucket-sheet .sheet-actions{padding:14px 0 calc(14px + env(safe-area-inset-bottom))}
+  .field input{font-size:16px}
+  /* Sign-in is the first thing the page shows, not a sheet over something. */
+  #login.overlay{align-items:flex-start;padding:24px 16px;overflow-y:auto}
+  #login .sheet{border:1px solid var(--rule);padding:24px 18px}
+  #login .sheet::before{display:none}
+  #login .sheet-actions{position:static;padding-bottom:0}
+
   .intent{grid-template-columns:22px 1fr;gap:12px}
   .intent .ex{display:none}
+  .item{grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:start;padding:14px 0}
+  .item .tn{width:64px;height:64px}
+  .item-title{font-size:16px}
+  /* Under the words, beside the photo: a full-width button row made every
+     product 150px tall and the sheet showed three at a time. */
+  .item-acts{grid-column:2}
+  .item-acts .chip{flex:1;min-width:0}
+  .item-acts .chip.primary{flex:1.5}
   .btn-text,.chip{min-height:44px}
   /* A destructive control needs a real tap target, and the inline style that
      sizes it on desktop has to be overridden explicitly to get one. */
   .x{width:44px!important;height:44px!important;font-size:22px!important}
 }
+body.locked{overflow:hidden}
 </style>
 </head>
 <body>
@@ -235,17 +397,29 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 </div>
 
 <main id="app" class="hide">
-  <div class="hdr">
-    <div style="display:flex;flex-direction:column;gap:8px">
+  <header class="hdr">
+    <div class="hdr-title">
       <span class="eyebrow" id="eyebrow">Your list</span>
       <h1 id="headline">—</h1>
     </div>
-    <div class="counts" id="counts"></div>
-  </div>
+    <div class="hdr-side">
+      <div class="counts" id="counts"></div>
+      <div class="hdr-actions">
+        <button class="btn-ghost" onclick="openInspect()">Why no alert?</button>
+        <button class="btn-ghost" onclick="openAdd()">Add a watch</button>
+      </div>
+    </div>
+  </header>
   <div class="body">
     <div id="warnings"></div>
     <div id="sheet" aria-live="polite"></div>
   </div>
+  <!-- The phone's two primary actions, where a thumb already is. On a wide
+       screen they live in the header instead and this is not rendered. -->
+  <nav class="dock" aria-label="Actions">
+    <button class="btn-ghost" onclick="openInspect()">Why no alert?</button>
+    <button class="btn-accent" onclick="openAdd()">Add a watch</button>
+  </nav>
 </main>
 
 <div id="add" class="overlay hide" onclick="if(event.target===this)closeSheet()"></div>
@@ -254,7 +428,8 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let WATCHES = [], EVENTS = [], TIMER = null, INTENT = 'restock';
+let WATCHES = [], EVENTS = [], BUCKETS = [], TIMER = null, INTENT = 'restock';
+let OPEN_BUCKET = null, OPEN_SIG = '';
 
 function toast(msg, kind = '') {
   const t = document.createElement('div');
@@ -591,9 +766,35 @@ function itemsOf(e) {
             price: it.price, url, cart: carts.length === 1 ? carts[0].cart_url : '',
             /* Carried through, not recomputed: the verdict was stored with the
                event so that this page, the alert and the history agree. */
-            starred: it.starred, landed: it.landed};
+            starred: it.starred, landed: it.landed,
+            image: it.image || (p.handles.length === 1 ? p.image : '') || '',
+            available: it.available, available_stated: it.available_stated};
   });
 }
+
+/* Store photos at thumbnail size. Shopify's CDN resizes on request, so a
+   64px square on a phone does not cost the 2000px original. Anything that
+   is not plainly http(s) is refused rather than handed to an <img>. */
+function thumbUrl(src, px) {
+  if (!src || !/^https?:\/\//i.test(src)) return '';
+  try {
+    const u = new URL(src);
+    if (u.hostname === 'cdn.shopify.com' || u.pathname.includes('/cdn/shop/'))
+      u.searchParams.set('width', String(px));
+    return u.href;
+  } catch (err) { return ''; }
+}
+/* Links in the drop sheet come partly from third-party feeds. Only plain
+   http(s) is allowed through to an href; anything else renders as no link. */
+const safeHref = u => /^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '';
+
+/* A missing or broken photo leaves the hatch showing, never a broken-image
+   icon or a collapsed row. */
+const thumb = (src, px) => {
+  const u = thumbUrl(src, px * 2);
+  return `<span class="tn">${u ? `<img src="${esc(u)}" alt="" loading="lazy"`
+    + ` decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
+};
 
 /* A drop is one row, not a card.
 
@@ -615,42 +816,190 @@ function lagNote(e) {
        + `${t} before we detected it">· ${t} behind</span>`;
 }
 
-function dropRow(it, e, announce) {
-  const act = it.cart
-    ? `<button class="chip primary mini" onclick="window.open('${esc(it.cart)}','_blank','noopener')">Cart</button>`
-    : it.url
-    ? `<button class="chip mini" onclick="window.open('${esc(it.url)}','_blank','noopener')">${announce ? 'Read' : 'Open'}</button>`
-    : '<span class="caption">no link</span>';
-  /* A relist is not a release. Saying so on the row keeps the "just dropped"
-     count honest instead of quietly inflating it with old stock returning. */
-  const arrival = (e.payload || {}).arrival;
-  const tag = arrival === 'relisted'
-    ? '<span class="tag">relisted</span>'
-    : arrival === 'unconfirmed'
-    ? '<span class="tag" title="The store gave no listing date, so this may not be new">unverified</span>'
-    : arrival === 'launched'
-    /* Listed for a while, buyable as of now — a coming-soon item going live.
-       Marked distinctly because the catalogue did not grow: nothing here is
-       new, the checkout just opened. */
-    ? '<span class="tag now" title="Already listed; the store just made it buyable">now buyable</span>'
-    : '';
-  /* A star is not a verdict: the cheap tag gates passed and it is worth
-     pricing against US retail, which nothing here can do. */
-  const star = it.starred ? '<span class="star" title="Clears your gates — worth pricing against US retail">★</span> ' : '';
-  const landed = it.landed != null
-    ? `<span class="caption"> ≈$${Number(it.landed).toLocaleString(undefined, {maximumFractionDigits: 0})} landed</span>` : '';
-  return `<div class="fired">
-    <span class="fi">
-      <span class="k">${star}${esc(evName(e))}${tag}</span>
-      ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>`
-               : esc(it.title)}
+/* What kind of arrival this was, in the words the storefront would use. A
+   relist is not a release, and a listing you cannot buy yet is "coming
+   soon" — the one word a shopper already knows. */
+function arrivalTag(it, e) {
+  const p = e.payload || {};
+  if (it.available === false && it.available_stated)
+    return '<span class="tag soon" title="Listed, nothing buyable yet">coming soon</span>';
+  if (p.arrival === 'relisted') return '<span class="tag">relisted</span>';
+  if (p.arrival === 'unconfirmed')
+    return '<span class="tag" title="The store gave no listing date, so this may not be new">unverified</span>';
+  if (p.arrival === 'launched') {
+    /* Listed for a while, buyable as of now. Same split as the Telegram
+       alert: never seen on sale is a release, seen before is a restock. */
+    if (Array.isArray(p.first_sale))
+      return p.first_sale.includes(it.handle)
+        ? '<span class="tag now" title="Never on sale before, as far back as this watch has looked">released</span>'
+        : '<span class="tag now" title="On sale before, sold out, and buyable again">back in stock</span>';
+    return '<span class="tag now" title="Already listed; the store just made it buyable">now buyable</span>';
+  }
+  return '';
+}
+
+/* ---------- buckets: one per watch ---------- */
+
+/* Collection names that say nothing on their own: the watch is the store. */
+const GENERIC_NAME = /^(all|all[- ]products|shop[- ]all|frontpage|products|catalog(ue)?)?$/i;
+
+function bucketize(rows) {
+  const by = new Map();
+  for (const r of rows) {
+    const key = String(r.e.watch_id ?? evName(r.e));
+    let b = by.get(key);
+    if (!b) {
+      const w = WATCHES.find(x => x.id === r.e.watch_id);
+      const brand = ((w && w.brand) || r.e.watch_brand || '').trim();
+      const short = (w ? shortName(w) : (r.e.watch_name || '')).trim();
+      const plain = GENERIC_NAME.test(short) || short === brand;
+      b = {key, announce: r.a, rows: [], newest: null, newestAt: null,
+           title: plain ? (brand || short || evName(r.e)) : short,
+           kicker: plain ? '' : brand,
+           url: safeHref((w && w.url) || r.e.watch_url)};
+      by.set(key, b);
+    }
+    b.rows.push(r);
+    const t = when(r.e.created_at);
+    if (t && (!b.newest || t > b.newest)) { b.newest = t; b.newestAt = r.e.created_at; }
+  }
+  const list = [...by.values()];
+  for (const b of list)
+    b.rows.sort((x, y) => (when(y.e.created_at) || 0) - (when(x.e.created_at) || 0));
+  return list.sort((x, y) => (y.newest || 0) - (x.newest || 0));
+}
+
+/* "10 buyable items" only when all ten are. A coming-soon listing arriving in
+   the same sweep is not buyable, and a count that says it is would be the
+   first number on the page to lie. */
+function countLine(b) {
+  const n = b.rows.length, noun = n === 1 ? 'item' : 'items';
+  if (b.announce) return `${n} to read`;
+  const stated = b.rows.some(r => r.it.available != null);
+  const buyable = b.rows.filter(r => r.it.available === true).length;
+  if (!stated) return `${n} new ${noun}`;
+  return buyable === n ? `${n} buyable ${noun}` : `${n} ${noun} · ${buyable} buyable`;
+}
+
+function bucketRow(b) {
+  const stars = b.rows.filter(r => r.it.starred).length;
+  const photos = b.rows.map(r => r.it.image).filter(Boolean);
+  const deck = (photos.length ? photos : ['']).slice(0, 3).map(src => thumb(src, 64)).join('');
+  return `<button class="bucket" data-key="${esc(b.key)}" onclick="openBucket(this.dataset.key)">
+    <span class="deck">${deck}</span>
+    <span class="bk-main">
+      ${b.kicker ? `<span class="k">${esc(b.kicker)}</span>` : ''}
+      <span class="bk-name">${esc(b.title)}</span>
+      <span class="bk-meta"><b>${esc(countLine(b))}</b> · newest ${esc(ago(b.newestAt))}${stars
+        ? ` · <span class="star" title="Clear your gates">★</span> ${stars}` : ''}</span>
     </span>
-    <span class="fp">${it.price != null ? money(it.price, e.watch_currency) : ''}${landed}</span>
-    <span class="ft">${esc(ago(e.created_at))}${lagNote(e)}</span>
-    ${act}
-    <button class="x" title="Dismiss" aria-label="Dismiss ${esc(it.title)}"
-      onclick="dismiss(${e.id})">&times;</button>
+    <span class="bk-go"><span>View</span><i aria-hidden="true">›</i></span>
+  </button>`;
+}
+
+/* One product inside a bucket. Links are real links, not scripted buttons:
+   long-press to copy or open in a new tab works, and a URL cannot break out
+   of a quoted script argument. */
+function itemRow(r) {
+  const {e, a} = r;
+  const it = {...r.it, url: safeHref(r.it.url), cart: safeHref(r.it.cart)};
+  const link = (href, label, cls) =>
+    `<a class="chip mini${cls}" href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`;
+  const acts = [
+    it.cart ? link(it.cart, 'Cart', ' primary') : '',
+    it.url ? link(it.url, a ? 'Read' : 'Open', it.cart ? '' : ' primary') : '',
+  ].join('') || '<span class="caption">no link</span>';
+  const star = it.starred
+    ? '<span class="star" title="Clears your gates — worth pricing against US retail">★</span> ' : '';
+  const tag = arrivalTag(it, e);
+  const price = it.price != null
+    ? `<span class="price">${money(it.price, e.watch_currency)}</span>` : '';
+  const landed = it.landed != null
+    ? ` ≈$${Number(it.landed).toLocaleString(undefined, {maximumFractionDigits: 0})} landed` : '';
+  const meta = [price + landed, esc(ago(e.created_at)) + ' ' + lagNote(e)].filter(Boolean).join(' · ');
+  const photo = thumb(it.image, 76);
+  return `<div class="item">
+    ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">${photo}</a>` : photo}
+    <div class="item-main">
+      ${star || tag ? `<span class="k">${star}${tag}</span>` : ''}
+      ${it.url ? `<a class="item-title" href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>`
+               : `<span class="item-title">${esc(it.title)}</span>`}
+      <span class="item-meta">${meta}</span>
+    </div>
+    <div class="item-acts">
+      ${acts}
+      <button class="x" title="Dismiss" aria-label="Dismiss ${esc(it.title)}"
+        data-e="${e.id}" data-h="${esc(it.handle)}" onclick="dismissItem(this)">&times;</button>
+    </div>
   </div>`;
+}
+
+function openBucket(key) {
+  OPEN_BUCKET = key;
+  OPEN_SIG = '';
+  renderBucket(true);
+}
+
+/* Redrawn only when its contents change. The page refreshes every ten
+   seconds, and replacing the list under a thumb mid-scroll kills the scroll. */
+function renderBucket(first) {
+  const b = BUCKETS.find(x => x.key === OPEN_BUCKET);
+  if (!b) { if (!first) closeSheet(); return; }
+  const sig = b.rows.map(r => r.e.id + ':' + r.it.handle).join(',');
+  if (!first && sig === OPEN_SIG) return;
+  OPEN_SIG = sig;
+  const old = $('add').querySelector('.bucket-sheet');
+  const keep = old && !first ? old.scrollTop : 0;
+  $('add').innerHTML = `<div class="sheet bucket-sheet" role="dialog" aria-modal="true"
+      aria-label="${esc(b.title)}">
+    <div class="sheet-head">
+      <div style="min-width:0">
+        ${b.kicker ? `<span class="eyebrow">${esc(b.kicker)}</span>` : ''}
+        <h2>${esc(b.title)}</h2>
+        <p class="sub">${esc(countLine(b))} · newest ${esc(ago(b.newestAt))}</p>
+      </div>
+      <button class="x" aria-label="Close" onclick="closeSheet()">&times;</button>
+    </div>
+    <div class="items">${b.rows.map(itemRow).join('')}</div>
+    <div class="sheet-actions">
+      ${b.url ? `<a class="btn-text" style="color:var(--accent)" href="${esc(b.url)}"
+        target="_blank" rel="noopener">Open the store</a>` : ''}
+      <button class="btn-text" style="color:var(--muted);margin-left:auto"
+        onclick="clearBucket()">Clear all ${b.rows.length}</button>
+    </div>
+  </div>`;
+  if (first) showSheet();
+  const now = $('add').querySelector('.bucket-sheet');
+  if (now) now.scrollTop = keep;
+}
+
+/* One product, not the whole alert it arrived in: a sweep that found three
+   stores them as one event, and dismissing the event took all three. */
+async function dismissItem(btn) {
+  const id = Number(btn.dataset.e), handle = btn.dataset.h;
+  btn.disabled = true;
+  try {
+    await api('/events/' + id + '/items/' + encodeURIComponent(handle), {method: 'DELETE'});
+  } catch (err) {
+    /* Already dismissed on another device: the goal is met, so say nothing. */
+    if (!/no such/i.test(err.message)) { btn.disabled = false; toast(err.message, 'bad'); return; }
+  }
+  const e = EVENTS.find(x => x.id === id);
+  if (e) {
+    const p = e.payload || {};
+    p.handles = (p.handles || []).filter(h => h !== handle);
+    if (!p.handles.length) EVENTS = EVENTS.filter(x => x.id !== id);
+  }
+  render();
+}
+
+async function clearBucket() {
+  const b = BUCKETS.find(x => x.key === OPEN_BUCKET);
+  if (!b) return closeSheet();
+  if (!confirm(`Clear all ${b.rows.length} from ${b.title}? The watch keeps running.`)) return;
+  const ids = [...new Set(b.rows.map(r => r.e.id))];
+  closeSheet();
+  await dismissAll(ids);
 }
 
 /* One line per alert ever sent, so the dashboard can be checked against
@@ -714,14 +1063,15 @@ function render() {
     : n === 0 ? 'Nothing to act on' : n + ' thing' + (n === 1 ? '' : 's') + ' to act on';
   $('eyebrow').textContent = 'Your list · ' + new Date().toLocaleDateString(undefined,
     {weekday: 'long', day: 'numeric', month: 'long'});
-  $('counts').innerHTML =
-    `<span style="color:var(--in-stock)">${act.length} buyable</span>
-     ${buy.length ? `<span style="color:var(--in-stock)">${buy.length} just dropped</span>` : ''}
-     ${news.length ? `<span>${news.length} to read</span>` : ''}
-     <span>${held.length} held</span>
-     <span style="color:var(--failing)">${broken.length} broken</span>
-     <button class="btn-ghost" onclick="openAdd()">Add a watch</button>
-     <button class="btn-ghost" onclick="openInspect()">Why no alert?</button>`;
+  /* Colour only when there is something to see: a green 0 and a red 0
+     both read as news. */
+  const stat = (n, label, tone) =>
+    `<div class="stat ${n ? tone : 'zero'}"><b>${n}</b><span>${label}</span></div>`;
+  $('counts').innerHTML = stat(act.length, 'Buyable', 'ok') + stat(buy.length, 'Dropped', 'ok')
+    + (news.length ? stat(news.length, 'To read', '') : '')
+    + stat(held.length, 'Held', '') + stat(broken.length, 'Broken', 'bad');
+  BUCKETS = bucketize([...buy, ...news]);
+  const buyB = BUCKETS.filter(b => !b.announce), newsB = BUCKETS.filter(b => b.announce);
 
   const clearBtn = ids => `<button class="btn-text" style="color:var(--dim);margin-left:14px"
       onclick="dismissAll([${ids}])">Clear</button>`;
@@ -731,12 +1081,12 @@ function render() {
   if (buy.length) {
     const ids = [...new Set(buy.map(r => r.e.id))];
     html = `<div class="group-label">Just dropped · ${buy.length}${clearBtn(ids)}</div>
-      <div>${buy.map(r => dropRow(r.it, r.e, false)).join('')}</div>` + html;
+      <div>${buyB.map(bucketRow).join('')}</div>` + html;
   }
   if (news.length) {
     const ids = [...new Set(news.map(r => r.e.id))];
     html += `<div class="group-label">From your feeds · ${news.length}${clearBtn(ids)}</div>
-      <div>${news.map(r => dropRow(r.it, r.e, true)).join('')}</div>`;
+      <div>${newsB.map(bucketRow).join('')}</div>`;
   }
   if (waiting.length) {
     html += `<div class="group-label">Waiting · ${waiting.length} · nothing to do</div>
@@ -757,6 +1107,8 @@ function render() {
       restock, a store URL for new drops, or a feed URL for something not announced.</div>`;
   }
   $('sheet').innerHTML = html;
+  if (OPEN_BUCKET !== null && $('add').querySelector('.bucket-sheet')
+      && !$('add').classList.contains('hide')) renderBucket(false);
 }
 
 /* ---------- actions ---------- */
@@ -765,7 +1117,7 @@ async function refresh() {
   try {
     /* The alert feed is not optional decoration — it is the only place a fired
        drop lives, since the watch itself goes straight back to watching. */
-    const [w, e] = await Promise.all([api('/watches'), api('/events?limit=50')]);
+    const [w, e] = await Promise.all([api('/watches'), api('/events?limit=200')]);
     WATCHES = w.watches;
     EVENTS = e.events || [];
     render();
@@ -796,6 +1148,7 @@ async function checkNow(id, btn) {
 }
 
 async function detail(id) {
+  OPEN_BUCKET = null;
   const d = await api('/watches/' + id);
   const w = d.watch, st = derive(w);
   $('add').innerHTML = `<div class="sheet">
@@ -817,10 +1170,11 @@ async function detail(id) {
     </div>
     <div class="sheet-actions"><button class="btn-ghost" onclick="closeSheet()">Close</button></div>
   </div>`;
-  $('add').classList.remove('hide');
+  showSheet();
 }
 
 async function edit(id) {
+  OPEN_BUCKET = null;
   const w = (await api('/watches/' + id)).watch;
   const feedWatch = w.strategy === 'announce';
   const tier = w.base_interval_s <= 45 ? 'fast' : w.base_interval_s >= 900 ? 'slow' : 'base';
@@ -873,7 +1227,7 @@ async function edit(id) {
       <span id="eErr" style="font-size:12px;color:var(--failing)"></span>
     </div>
   </div>`;
-  $('add').classList.remove('hide');
+  showSheet();
 
   /* Say up front that a URL or keyword change starts over — otherwise the
      watch silently goes quiet for a cycle and looks broken. */
@@ -937,6 +1291,7 @@ const INTENTS = [
 ];
 
 function openAdd() {
+  OPEN_BUCKET = null;
   INTENT = 'restock';
   $('add').innerHTML = `<div class="sheet">
     <h2>What do you want to be told about?</h2>
@@ -989,7 +1344,7 @@ function openAdd() {
       <span id="addErr" style="font-size:12px;color:var(--failing)"></span>
     </div>
   </div>`;
-  $('add').classList.remove('hide');
+  showSheet();
   $('aUrl').addEventListener('blur', detect);
   $('aUrl').addEventListener('input', () => { $('detect').innerHTML = ''; });
   $('aUrl').focus();
@@ -999,6 +1354,7 @@ function openAdd() {
    ledger waiting to become buyable. From the outside those look identical, so
    this asks the server which one it is. */
 function openInspect() {
+  OPEN_BUCKET = null;
   $('add').innerHTML = `<div class="sheet">
     <h2>Why didn't this alert?</h2>
     <p class="sub">Paste a product URL. I'll tell you what the monitor can see,
@@ -1013,7 +1369,7 @@ function openInspect() {
       <button class="btn-text" onclick="closeSheet()">Close</button>
     </div>
   </div>`;
-  $('add').classList.remove('hide');
+  showSheet();
   $('iUrl').focus();
   $('iUrl').addEventListener('keydown', e => { if (e.key === 'Enter') runInspect(); });
 }
@@ -1081,7 +1437,16 @@ async function runInspect() {
     ${(!rows && !d.note) ? `<div class="warn">Nothing is watching this store.</div>` : ''}`;
 }
 
-const closeSheet = () => $('add').classList.add('hide');
+function showSheet() {
+  $('add').classList.remove('hide');
+  document.body.classList.add('locked');
+}
+function closeSheet() {
+  $('add').classList.add('hide');
+  document.body.classList.remove('locked');
+  OPEN_BUCKET = null;
+  OPEN_SIG = '';
+}
 
 function pickIntent(id) {
   INTENT = id;

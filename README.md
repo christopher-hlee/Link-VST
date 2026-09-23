@@ -20,18 +20,49 @@ promoted. Sold-out sizes are absent rather than disabled — a greyed button
 invites a tap that cannot work. Single-variant products collapse to one
 "Add to cart".
 
-A fired drop shows as one compact row per item — brand, name, price, a cart or
-open link, and an `×` — grouped under **Just dropped**, because the watch itself
-goes straight back to watching and would otherwise show nothing. Feed matches
-land separately under **From your feeds**: an article is something to read, not
-something to buy, and letting articles inflate "things to act on" is how that
-number stops meaning anything.
+Drops are grouped **by watch**, not listed by product. Twelve RAGTAG
+listings going on sale over an afternoon are one fact — that store has things
+you can buy — so **Just dropped** shows one row per watch: a fan of the newest
+product photos, *"12 buyable items"*, and how long ago the newest arrived.
+The count says "buyable" only when every item is; a coming-soon listing that
+arrived in the same sweep makes it *"3 items · 2 buyable"*. Tapping the row
+opens a sheet listing each product with its photo, price (and landed cost and
+★ where a star is configured), whether it was released, restocked, relisted or
+is coming soon, and its own **Cart**, **Open** and `×`. The sheet scrolls
+inside itself with its heading pinned, and redraws only when its contents
+change, so the ten-second refresh never yanks the list from under a thumb.
 
-Every row dismisses individually, each group clears at once, and dismissing
-deletes the event server-side rather than setting a browser flag — this gets
-read on a phone and on a laptop, and an alert cleared on one has to be gone on
-the other. Anything still listed above is not repeated in **Recent alerts**,
-which holds the rest of the history.
+Feed matches group the same way under **From your feeds**: an article is
+something to read, not something to buy, and letting articles inflate "things
+to act on" is how that number stops meaning anything.
+
+Photos come from the store's own catalogue feed — no extra requests — and are
+asked for at thumbnail size, since Shopify's CDN resizes on request. A product
+without one, or whose photo fails to load, shows the same hatch as every other
+empty image slot rather than a broken-image icon.
+
+Dismissing removes **one product**, not the alert it arrived in. A sweep that
+finds three products stores them as one event, and deleting the event to
+dismiss one of them took the other two with it unread. Dismissal is
+server-side rather than a browser flag — this gets read on a phone and on a
+laptop, and an item cleared on one has to be gone on the other. **Clear all**
+in a sheet empties that watch's bucket; anything still listed above is not
+repeated in **Recent alerts**, which holds the rest of the history.
+
+### On a phone
+
+The phone gets its own layout rather than the desktop one squeezed:
+
+- The header counts are a strip of figures, not a sentence that wrapped
+  wherever the screen ended.
+- **Add a watch** and **Why no alert?** sit in a dock at the bottom, where the
+  thumb is, clear of the home indicator.
+- Every row is at most two lines — what it is, then its state — and nothing
+  shares a line with a field that can grow.
+- Sheets rise from the bottom, scroll inside themselves, and keep their main
+  button pinned in reach. Inputs are 16px, because iOS zooms the whole page
+  into anything smaller and does not zoom back out.
+- Every control is at least 44px to tap.
 
 ## A drop is a list; a restock is one transition
 
@@ -449,6 +480,7 @@ sudo systemctl disable --now restock-autodeploy.timer   # turn it off
 | GET/PATCH/DELETE | `/api/watches/{id}` | |
 | POST | `/api/watches/{id}/check` · `/arm` · `/disarm` | |
 | GET | `/api/events` | alert feed |
+| DELETE | `/api/events/{id}` · `/api/events/{id}/items/{handle}` | dismiss an alert, or one product in it |
 | POST | `/api/test-alert` | Telegram self-test |
 
 Browser access uses a signed session cookie; `MONITOR_API_KEY` gives Bearer
@@ -533,9 +565,15 @@ is public.
 python3 ui-check.py
 ```
 
-A real browser at 375, 430, 820 and 1280px, asserting the things that have
-actually broken: no sideways scroll, no row wrapping pathologically, no
-"Invalid Date" or stray `undefined`, and tap targets at least 44px.
+A real browser at 375, 393, 430, 820 and 1280px, asserting the things that
+have actually broken: no sideways scroll, no row wrapping pathologically, no
+"Invalid Date" or stray `undefined`, no script errors, and tap targets at least
+44px. It also uses the page: it checks the drops arrive grouped with honest
+counts, the photos load and draw square, the header labels fit, and the phone
+dock never covers content. It opens a bucket and checks that the sheet fits the
+screen, scrolls with its heading pinned, and locks the page behind it. It
+checks the add form cannot trigger iOS zoom and that dismissing one product
+leaves the rest of its sweep, on the page and on the server.
 
 In CI it refuses to skip. On a developer's machine "no browser installed"
 reasonably means "cannot check"; in CI it meant the check did not happen while
