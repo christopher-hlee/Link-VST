@@ -115,7 +115,7 @@ def test_redeeming_sets_a_session_and_lands_on_the_dashboard(client):
     r = client.get(f"/api/auth/telegram?t={token}", follow_redirects=False)
 
     assert r.status_code == 303
-    assert r.headers["location"] == "/"
+    assert r.headers["location"].startswith("/?b="), "build-stamped, not bare /"
     cookie = r.headers["set-cookie"]
     assert "HttpOnly" in cookie and "Secure" in cookie
     assert client.get("/api/me").json()["authenticated"] is True
