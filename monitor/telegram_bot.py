@@ -36,7 +36,7 @@ HELP = (
     "/add &lt;url&gt; — start watching it\n"
     "/filter &lt;id&gt; vendor=AURALEE tags=size_L — narrow a watch\n"
     "/filter &lt;id&gt; off — widen it back\n"
-    "/star &lt;id&gt; colors=black,navy max=450 fx=142 — star good ones\n"
+    "/star &lt;id|all&gt; colors=black,navy max=450 fx=142 — star good ones\n"
     "/help — this"
 )
 
@@ -214,17 +214,33 @@ async def _add(url: str) -> str:
 
 
 async def _star(rest: str) -> str:
-    """Set the cheap gates a listing must clear to earn a star."""
+    """Set the cheap gates a listing must clear to earn a star.
+
+    Takes `all` as well as an id: a palette and a budget are facts about the
+    person, not about one shop, so making them retype it per watch is busywork
+    that also guarantees the settings drift apart.
+    """
     raw_id, _, arg = rest.strip().partition(" ")
     arg = arg.strip()
+    if raw_id.lower() == "all":
+        targets = [w for w in db.list_watches()
+                   if w.get("enabled") and (w.get("kind") == "collection")]
+        if not targets:
+            return "No collection watches to set."
+        replies = [await _star_one(w, arg) for w in targets]
+        return "\n\n".join(replies)
+
     if not raw_id.isdigit():
-        return ("Usage: <code>/star &lt;id&gt; colors=black,navy max=450 fx=142 "
-                "condition=A</code>  ·  <code>/star &lt;id&gt; off</code>")
+        return ("Usage: <code>/star &lt;id|all&gt; colors=black,navy max=450 "
+                "fx=142 condition=A</code>  ·  <code>/star &lt;id&gt; off</code>")
 
     watch = db.get_watch(int(raw_id))
     if not watch:
         return f"No watch {raw_id}. /status lists them."
+    return await _star_one(watch, arg)
 
+
+async def _star_one(watch: dict, arg: str) -> str:
     spec = dict(db.get_filter(watch) or {})
     if arg.lower() in ("off", "none", "clear"):
         spec.pop("star", None)

@@ -669,7 +669,11 @@ The bottleneck was never finding listings — one filtered wishlist had seventy.
 It was evaluating them one at a time. So a listing that clears the cheap gates
 gets a **★** and a landed cost, and everything else stays quiet.
 
-`/star <id> colors=black,navy max=450 fx=142 condition=A`
+`/star all colors=black,navy max=450 fx=142 condition=A`
+
+Takes `all` as well as one id: a palette and a budget are facts about the
+person, not about one shop, so retyping them per watch is busywork that also
+guarantees the settings drift apart. Each watch keeps its own saved search.
 
 Stars are **off until configured** — a star with nothing behind it would mean
 nothing — so `/status` prints `★ off` for a watch that has none. A feature that

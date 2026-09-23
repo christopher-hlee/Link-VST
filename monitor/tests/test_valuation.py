@@ -322,3 +322,42 @@ async def test_a_yen_watch_without_a_rate_is_told_so(watch_id):
     reply = await telegram_bot.handle(f"/star {watch_id} colors=black max=450")
 
     assert "No fx rate set" in reply
+
+
+async def test_one_message_configures_every_watch(watch_id, monkeypatch):
+    """A palette and a budget are facts about the person, not about one shop.
+    Retyping them per watch is busywork that also guarantees drift."""
+    second = db.create_watch(name="namu · auralee", brand="namu-shop.com",
+                             url="https://www.namu-shop.com/collections/auralee",
+                             strategy="shopify", kind="collection",
+                             target_ref="auralee", last_state="watching")
+    product_watch = db.create_watch(name="one tee", brand="s.com",
+                                    url="https://s.com/products/tee",
+                                    strategy="shopify", kind="product",
+                                    target_ref="tee")
+
+    reply = await telegram_bot.handle("/star all colors=black max=450 fx=142")
+
+    for wid in (watch_id, second):
+        assert db.get_filter(db.get_watch(wid))["star"]["max_landed"] == 450.0
+    assert db.get_filter(db.get_watch(product_watch)) is None, \
+        "a single-product watch has no catalogue to value"
+    assert reply.count("colours Black") == 2
+
+
+async def test_all_leaves_each_watch_s_own_search_alone(watch_id):
+    """The star settings are shared; what each watch is looking for is not."""
+    db.update_watch(watch_id, filter_json=json.dumps({"vendors": ["COMOLI"]}))
+
+    await telegram_bot.handle("/star all max=450 fx=142")
+
+    spec = db.get_filter(db.get_watch(watch_id))
+    assert spec["vendors"] == ["COMOLI"]
+    assert spec["star"]["max_landed"] == 450.0
+
+
+async def test_all_says_so_when_there_is_nothing_to_set(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "empty.db")
+    db.init_db()
+
+    assert "No collection watches" in await telegram_bot.handle("/star all max=1")
