@@ -114,6 +114,25 @@ def _saved_search(fields: dict, url: str) -> None:
     fields["filter_json"] = json.dumps(spec) if spec else None
 
 
+_CURRENCY = re.compile(r"^[A-Z]{3}$")
+
+
+def _currency(fields: dict) -> bool:
+    """Normalise a currency the person chose. True when one was given.
+
+    A chosen currency is final: the scheduler's one-off question to the store
+    is marked answered, so it cannot later overwrite what someone picked.
+    """
+    if fields.get("currency") is None:
+        fields.pop("currency", None)
+        return False
+    code = str(fields["currency"]).strip().upper()
+    if not _CURRENCY.match(code):
+        raise HTTPException(400, "currency must be a three-letter code, like JPY")
+    fields["currency"] = code
+    return True
+
+
 @router.post("/watches", status_code=201)
 async def create_watch(body: WatchCreate):
     fields = body.model_dump(exclude_none=True)
@@ -157,8 +176,11 @@ async def create_watch(body: WatchCreate):
     fields["base_interval_s"] = TIERS[tier]
     fields["next_check_at"] = EPOCH
     _saved_search(fields, body.url)
+    chosen = _currency(fields)
 
     watch_id = db.create_watch(**fields)
+    if chosen:
+        db.kv_set(scheduler.currency_key(watch_id), "manual")
     return {"watch": db.get_watch(watch_id)}
 
 
@@ -191,6 +213,8 @@ def update_watch(watch_id: int, body: WatchUpdate):
         spec = fields["filter_json"]
         fields["filter_json"] = json.dumps(spec) if spec else None
 
+    chosen = _currency(fields)
+
     changed = {k for k in fields if k in RECHECK_FIELDS
                and (fields[k] or None) != (current.get(k) or None)}
 
@@ -206,6 +230,13 @@ def update_watch(watch_id: int, body: WatchUpdate):
         fields["next_check_at"] = EPOCH
 
     db.update_watch(watch_id, **fields)
+    if chosen:
+        db.kv_set(scheduler.currency_key(watch_id), "manual")
+    elif "url" in changed and _host(fields["url"] or "") != _host(current.get("url") or ""):
+        # A different store may price in a different currency. Ask it again,
+        # unless the person has already said.
+        if db.kv_get(scheduler.currency_key(watch_id)) != "manual":
+            db.kv_set(scheduler.currency_key(watch_id), None)
     return {"watch": db.get_watch(watch_id), "rebaselined": bool(changed & REBASELINE_FIELDS)}
 
 

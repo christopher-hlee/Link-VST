@@ -760,3 +760,17 @@ of about 142, in the flattering direction. There is no FX conversion: the
 alert prints ¥49,160 because that is what the store charges, and inventing a
 dollar figure would mean carrying a rate that goes stale silently.
 
+**Learned from the store, not assumed.** Every watch used to default to USD
+and nothing a person could reach — not the dashboard, not `/add` — set
+anything else. So a RAGTAG watch showed ¥49,160 as $49,160, and with stars
+configured the fx rate was ignored and the landed cost came out near $59,000:
+no star could ever clear a $450 ceiling. Now each Shopify watch asks its store
+once, via `/meta.json`, which states the currency `products.json` is priced
+in. It asks before the first sweep, records the answer so a restart does not
+ask again, and retries a day later if the store could not be reached.
+
+The Edit sheet has a **Prices in** choice for when detection is wrong or the
+store will not say. A currency picked there is final: detection never
+overrides it. `/star` says so when it is handed an `fx=` rate for a watch
+priced in dollars, instead of quietly not using it.
+

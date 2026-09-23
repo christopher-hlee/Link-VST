@@ -372,7 +372,7 @@ a.item-title:hover{color:var(--accent)}
   .item-acts{grid-column:2}
   .item-acts .chip{flex:1;min-width:0}
   .item-acts .chip.primary{flex:1.5}
-  .btn-text,.chip{min-height:44px}
+  .btn-text,.chip,.seg button{min-height:44px}
   /* A destructive control needs a real tap target, and the inline style that
      sizes it on desktop has to be overridden explicitly to get one. */
   .x{width:44px!important;height:44px!important;font-size:22px!important}
@@ -1205,6 +1205,12 @@ async function edit(id) {
         label it <b>held, not your size</b> rather than going quiet unexplained.</div>
     </div>`}
 
+    ${w.strategy === 'shopify' ? `<div class="field">
+      <label>Prices in <span style="color:var(--dim)">found from the store; change only if wrong</span></label>
+      <div class="seg" id="eCur">${[...new Set([...Object.keys(SYMBOLS), (w.currency || 'USD').toUpperCase()])]
+        .map(c => `<button aria-pressed="${c === (w.currency || 'USD').toUpperCase()}" data-cur="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    </div>` : ''}
+
     <div class="field">
       <label>How often</label>
       <div class="seg" id="eSeg">
@@ -1242,8 +1248,12 @@ async function edit(id) {
   };
   $('eUrl').addEventListener('input', flag);
   if (feedWatch) $('eKw').addEventListener('input', flag);
-  [...$('eSeg').children].forEach(b => b.onclick = () =>
-    [...$('eSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b)));
+  for (const id of ['eSeg', 'eCur']) {
+    if (!$(id)) continue;
+    [...$(id).children].forEach(b => b.onclick = () =>
+      [...$(id).children].forEach(x => x.setAttribute('aria-pressed', x === b)));
+  }
+  $('eSave').dataset.cur = (w.currency || 'USD').toUpperCase();
 }
 
 async function saveEdit(id) {
@@ -1255,6 +1265,11 @@ async function saveEdit(id) {
   };
   if ($('eKw')) body.target_ref = $('eKw').value.trim();
   if ($('eSize')) body.size_pref = $('eSize').value.trim() || null;
+  /* Sent only when changed. A currency sent at all is recorded as the
+     person's choice and switches off detection for good, so re-saving a
+     name must not quietly pin whatever the default happened to be. */
+  const cur = $('eCur') && [...$('eCur').children].find(b => b.getAttribute('aria-pressed') === 'true');
+  if (cur && cur.dataset.cur !== $('eSave').dataset.cur) body.currency = cur.dataset.cur;
 
   $('eSave').disabled = true;
   try {

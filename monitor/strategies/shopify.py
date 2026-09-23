@@ -496,6 +496,29 @@ async def _check_collection_atom(base: str, coll: str | None, watch: dict,
 
 # ----------------------------------------------------------------- detection
 
+_CURRENCY_CODE = re.compile(r"^[A-Z]{3}$")
+
+
+async def store_currency(url: str) -> tuple[bool, str | None]:
+    """The currency this store's catalogue prices are in.
+
+    products.json carries bare numbers — 49160 with nothing to say it is yen —
+    and every watch defaulted to dollars, so a RAGTAG coat rendered as $49,160
+    and its landed cost came out at fifty-seven thousand dollars: no star could
+    ever clear a $450 ceiling. /meta.json states the shop's base currency, the
+    one products.json is priced in.
+
+    Returns (answered, code). Not answered — a timeout, a 5xx, a 429 — is worth
+    asking again later; answered without a code is final.
+    """
+    resp = await fetch(f"{origin(url)}/meta.json", retries=0)
+    if not resp.ok:
+        return resp.status in (401, 403, 404, 410), None
+    data = resp.json if isinstance(resp.json, dict) else {}
+    code = str(data.get("currency") or "").strip().upper()
+    return True, (code if _CURRENCY_CODE.match(code) else None)
+
+
 async def detect(url: str) -> dict | None:
     """Return watch config if this URL is a Shopify store, else None."""
     base = origin(url)

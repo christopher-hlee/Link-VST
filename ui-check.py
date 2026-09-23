@@ -383,6 +383,32 @@ def main() -> int:
             bottom = page.evaluate("document.getElementById('saveBtn').getBoundingClientRect().bottom")
             if bottom > 900:
                 fail("'Start watching' is below the bottom of the screen")
+            if phone:
+                for h in page.eval_on_selector_all(
+                        "#add .seg button",
+                        "els => els.map(e => Math.round(e.getBoundingClientRect().height))"):
+                    if h < MIN_TAP:
+                        fail(f"a segmented button is {h}px tall, under {MIN_TAP}px")
+            no_junk("#add")
+            page.keyboard.press("Escape")
+
+            # ---- the edit sheet shows the currency the watch prices in
+            page.locator(".wait", has_text="comoli").locator("text=Edit").click()
+            page.wait_for_timeout(300)
+            chosen = page.eval_on_selector_all(
+                "#eCur button[aria-pressed=true]", "els => els.map(e => e.textContent)")
+            if chosen != ["JPY"]:
+                fail(f"the RAGTAG watch's currency shows as {chosen}, not JPY")
+            wide = page.evaluate("(() => { const s = document.querySelector('#add .sheet');"
+                                 " return s.scrollWidth - s.clientWidth; })()")
+            if wide > 0:
+                fail(f"the edit sheet scrolls sideways by {wide}px")
+            if phone:
+                for h in page.eval_on_selector_all(
+                        "#eCur button",
+                        "els => els.map(e => Math.round(e.getBoundingClientRect().height))"):
+                    if h < MIN_TAP:
+                        fail(f"a currency button is {h}px tall, under {MIN_TAP}px")
             no_junk("#add")
             page.keyboard.press("Escape")
 

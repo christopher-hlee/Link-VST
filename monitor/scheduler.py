@@ -15,6 +15,7 @@ from datetime import timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from . import db, strategies
+from .strategies import shopify
 from .config import (
     ALERT_COOLDOWN_SECONDS, FAILURE_ALERT_THRESHOLD, JITTER_FRACTION,
     MAX_CONCURRENT_CHECKS, TICK_SECONDS,
@@ -61,6 +62,45 @@ def _sweep_window(watch: dict):
     return last - timedelta(seconds=slack)
 
 
+CURRENCY_RETRY_S = 24 * 3600
+
+
+def currency_key(watch_id: int) -> str:
+    return f"currency_probe:{watch_id}"
+
+
+async def learn_currency(watch: dict) -> None:
+    """Ask a Shopify store, once, what currency its prices are in.
+
+    One request per watch for its whole life, recorded in kv so a restart does
+    not ask again. A person's own choice (set from the dashboard) is recorded
+    as "manual" and is never overridden. A store that could not be reached is
+    asked again a day later, not on every tick.
+    """
+    if watch.get("strategy") != "shopify" or not watch.get("id"):
+        return
+    key = currency_key(watch["id"])
+    seen = db.kv_get(key)
+    if seen is not None:
+        if not seen.startswith("retry@"):
+            return
+        waited = seconds_since(seen[len("retry@"):])
+        if waited is not None and waited < CURRENCY_RETRY_S:
+            return
+    try:
+        answered, code = await shopify.store_currency(watch["url"])
+    except Exception:                               # never cost a check
+        answered, code = False, None
+    if not answered:
+        db.kv_set(key, "retry@" + stamp())
+        return
+    db.kv_set(key, code or "unstated")
+    if code and code != (watch.get("currency") or "USD").upper():
+        db.update_watch(watch["id"], currency=code)
+        watch["currency"] = code
+        log.info("watch %s is priced in %s", watch["id"], code)
+
+
 async def check_watch(watch: dict) -> bool:
     """Run one watch end to end: fetch, decide, persist, notify.
 
@@ -68,6 +108,9 @@ async def check_watch(watch: dict) -> bool:
     stock. The caller uses this to detect a systemic outage.
     """
     async with _gate:
+        # Before the check, so the very first sweep is already valued in the
+        # right currency rather than one sweep later.
+        await learn_currency(watch)
         try:
             result = await strategies.check(watch)
         except Exception as exc:                      # never kill the tick
