@@ -524,6 +524,16 @@ AI Search & Discovery — and encode a saved search in the storefront URL:
   &pf_v_brand=COMOLI
 ```
 
+A **collection page is not a product**, and the JSON-LD reader used to think
+otherwise. Every product card in a grid emits its own schema.org `Product`
+block, so `havenshop.com/collections/auralee` detected as *"Ultra Fine Tropical
+Wool Zip Blouson Top Charcoal"* — whichever garment happened to sort first.
+The watch would have monitored that one item while its owner believed it was
+watching the brand. The address is now checked before the page is fetched (no
+answer a collection page could give would make it a product), and a page
+declaring itself a `CollectionPage` is refused outright. `/collections/x/
+products/y` is still a product, because it is one.
+
 A **search results page** is refused outright. `/search?q=auralee` is a fine
 way for a person to find a brand and a trap for a monitor: Shopify's search is
 not exposed through the API, so a watch built from it polls the whole

@@ -17,7 +17,7 @@ import re
 
 from . import db, filters, strategies
 from .config import PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-from .fetcher import get_client
+from .fetcher import fetch, get_client
 from .timeutil import EPOCH
 from .notify.telegram import API, _esc, configured
 
@@ -104,8 +104,7 @@ async def _check(url: str) -> str:
     spec = filters.parse_boost_url(url)
     found = await strategies.detect(url)
     if not found:
-        return (f"Nothing I recognise at {_esc(url)}.\n"
-                "Not Shopify, or the catalogue is gated.")
+        return await _why_not(url)
 
     lines = [f"<b>{_esc(found.get('name') or url)}</b>",
              f"platform: {found.get('strategy')} · {found.get('kind')}",
@@ -130,6 +129,37 @@ async def _check(url: str) -> str:
         lines.append(f"saved search: {_esc(filters.describe(spec))}")
         lines.append("<i>those parameters do not reach the API — I would "
                      "apply them myself</i>")
+    return "\n".join(lines)
+
+
+async def _why_not(url: str) -> str:
+    """Name the endpoints that failed, rather than shrugging.
+
+    "Not Shopify, or the catalogue is gated" leaves the one useful fact — which
+    of the two — for someone with a shell on the server to find out, and a
+    shell on the server is exactly what is unavailable here.
+    """
+    from .strategies.shopify import collection_handle, origin
+
+    base = origin(url)
+    coll = collection_handle(url)
+    path = f"/collections/{coll}" if coll else ""
+    probes = [(f"{path}/products.json", f"{base}{path}/products.json?limit=1"),
+              (f"{path or '/collections/all'}.atom",
+               f"{base}{path or '/collections/all'}.atom")]
+
+    lines = [f"Cannot read {_esc(url)} as a catalogue."]
+    for label, probe in probes:
+        try:
+            resp = await fetch(probe)
+            status = resp.status or ("timeout" if resp.error else "?")
+        except Exception as exc:
+            status = type(exc).__name__
+        lines.append(f"<code>{_esc(label)}</code> → {_esc(status)}")
+
+    lines.append("")
+    lines.append("<i>403 or 404 on both means the store gates its catalogue "
+                 "endpoints. Nothing I can poll politely.</i>")
     return "\n".join(lines)
 
 

@@ -115,6 +115,44 @@ def _image(node: dict) -> str | None:
     return image if isinstance(image, str) else None
 
 
+# A page that says what it is. Product cards in a grid each carry their own
+# Product block, so "this page contains a Product" is not the same claim as
+# "this page IS a product".
+LISTING_PAGE_TYPES = {"collectionpage", "searchresultspage", "offercatalog"}
+
+
+def declares_itself_a_listing(html: str) -> bool:
+    for block in _blocks(html):
+        for node in _walk(block):
+            if not isinstance(node, dict):
+                continue
+            types = node.get("@type")
+            types = types if isinstance(types, list) else [types]
+            if any(isinstance(t, str) and t.lower() in LISTING_PAGE_TYPES
+                   for t in types):
+                return True
+    return False
+
+
+def looks_like_a_listing(url: str) -> bool:
+    """Whether the ADDRESS is a grid of products rather than one product.
+
+    A collection page's cards each emit their own Product block, so reading
+    "the first Product on the page" off `/collections/auralee` yields whichever
+    garment happened to be sorted first — and a watch built on it monitors that
+    one item while its owner believes it is watching the brand. It returns
+    data, reports healthy, and answers a different question than the one asked.
+    """
+    path = urlparse(url).path.rstrip("/")
+    if "/products/" in f"{path}/":
+        return False                      # /collections/x/products/y is a product
+    if not path:
+        return True                       # a store's front page
+    parts = [p for p in path.split("/") if p]
+    return parts[0].lower() in ("collections", "collection", "search",
+                                "category", "categories", "shop", "brands")
+
+
 def find_product(html: str) -> dict | None:
     """The first schema.org Product carrying an offer, or None."""
     fallback = None
@@ -187,8 +225,14 @@ async def check(watch: dict) -> CheckResult:
 
 
 async def detect(url: str) -> dict | None:
+    # Checked before the request, not after: there is no answer this page could
+    # give that would make a collection address into a product.
+    if looks_like_a_listing(url):
+        return None
     resp = await fetch(url)
     if not resp.ok:
+        return None
+    if declares_itself_a_listing(resp.text):
         return None
     product = find_product(resp.text)
     if product is None:
