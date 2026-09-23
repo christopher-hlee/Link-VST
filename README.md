@@ -434,6 +434,21 @@ Verify delivery from the dashboard's **Test Telegram** button before trusting it
 
 ## Auto-deploy
 
+> **Moved repositories?** The checkout on the server remembers where it came
+> from, so re-point it once and the timer picks up from here:
+>
+> ```bash
+> cd ~/restock-monitor
+> git remote set-url origin https://github.com/christopher-hlee/restock.git
+> echo main > .autodeploy-branch
+> git fetch origin main
+> sudo systemctl start restock-autodeploy     # deploy now instead of waiting
+> ```
+>
+> Nothing else moves: `monitor/.env` is not in git, so the Telegram token,
+> session secret and API keys on the server are untouched.
+
+
 Run once on the server, as `platform`:
 
 ```bash
