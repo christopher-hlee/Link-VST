@@ -1,0 +1,105 @@
+# Verifying the dashboard without asking anyone for a screenshot.
+#
+# Two different questions kept being confused for each other:
+#
+#   1. Is the layout correct in the code?      — answered by ui-check, locally
+#   2. Is that code the one being served?      — answerable nowhere, until now
+#
+# The second one cost several rounds of "still broken" against a fix that was
+# already committed, because the development container cannot reach the VPS
+# and the only evidence available was a photograph of a phone. A Actions
+# runner has ordinary internet access, so it can simply look.
+#
+# No credentials: `GET /` serves the same single HTML document whether signed
+# in or not — the login screen and the dashboard are one file — so the whole
+# stylesheet is readable unauthenticated, and /health is public by design.
+name: verify
+
+on:
+  push:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+jobs:
+  layout:
+    name: layout, in the code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r monitor/requirements.txt playwright
+      - run: playwright install --with-deps chromium
+      - name: unit tests
+        run: python -m pytest monitor/tests -q
+      - name: browser layout check
+        run: python ui-check.py
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: "0"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: /tmp/ui-*.png
+          if-no-files-found: ignore
+
+  live:
+    name: layout, as actually served
+    runs-on: ubuntu-latest
+    env:
+      SITE: https://0iu6eih.cserverhost.cloud
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: what the server says it is
+        run: |
+          echo "::group::/health"
+          curl -sS --max-time 20 "$SITE/health" | tee health.json || true
+          echo
+          echo "::endgroup::"
+
+      - name: headers on the dashboard
+        run: |
+          echo "::group::response headers"
+          curl -sS --max-time 20 -D - -o page.html "$SITE/" | head -20 || true
+          echo "::endgroup::"
+
+      - name: compare what is served against what is committed
+        run: |
+          set -u
+          fail=0
+
+          live_build=$(python3 -c "import json,sys;print(json.load(open('health.json')).get('build','MISSING'))" 2>/dev/null || echo UNREADABLE)
+          want_build=$(git rev-parse --short HEAD)
+          echo "committed here : $want_build"
+          echo "serving there  : $live_build"
+
+          # The layout fix, read straight out of the deployed stylesheet.
+          if grep -q '\.wait \.n{grid-column:1/-1' page.html; then
+            echo "layout fix     : PRESENT in the served page"
+          else
+            echo "layout fix     : ABSENT from the served page"
+            fail=1
+          fi
+
+          if curl -sS --max-time 20 -D - -o /dev/null "$SITE/" 2>/dev/null \
+             | grep -qi '^cache-control: *no-cache'; then
+            echo "cache header   : no-cache (browsers must revalidate)"
+          else
+            echo "cache header   : MISSING — a browser may serve a stale page"
+            fail=1
+          fi
+
+          if [ "$live_build" = "MISSING" ] || [ "$live_build" = "UNREADABLE" ]; then
+            echo
+            echo "The running build predates /health reporting one, so the"
+            echo "deploy has not picked up recent commits."
+            fail=1
+          elif [ "$live_build" != "$want_build" ]; then
+            echo
+            echo "Serving $live_build, committed $want_build — a deploy is"
+            echo "pending or stuck."
+          fi
+
+          exit $fail
