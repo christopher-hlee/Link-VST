@@ -84,6 +84,24 @@ rollback() {
   $SYSTEMCTL restart monitor-api || true
 }
 
+# The app moved from a branch of Link-VST to its own repository. A checkout
+# remembers where it was cloned from, so it re-points itself, once. The commit
+# carrying this block was pushed to both places, so the switch skips nothing:
+# origin/main already holds the commit this checkout is on.
+HOME_REMOTE="${AUTODEPLOY_HOME_REMOTE:-https://github.com/christopher-hlee/restock.git}"
+if git remote get-url origin 2>/dev/null | grep -qi 'christopher-hlee/Link-VST'; then
+  if git ls-remote --exit-code --heads "$HOME_REMOTE" main >/dev/null 2>&1; then
+    git remote set-url origin "$HOME_REMOTE"
+    echo main > .autodeploy-branch
+    BRANCH=main
+    log "re-pointed at $HOME_REMOTE ($BRANCH)"
+    notify "🏠 <b>Auto-deploy moved</b>
+Now following <code>christopher-hlee/restock</code> (main) instead of Link-VST."
+  else
+    log "restock repository unreachable — staying on Link-VST this tick"
+  fi
+fi
+
 git fetch --quiet origin "$BRANCH" || { log "fetch failed"; exit 1; }
 
 PREV="$(git rev-parse HEAD)"
