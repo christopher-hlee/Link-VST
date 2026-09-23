@@ -378,7 +378,7 @@ def list_events(limit: int = 100) -> list[dict]:
             # stored before per-item links were captured.
             """SELECT e.*, w.name AS watch_name, w.brand AS watch_brand,
                       w.url AS watch_url, w.kind AS watch_kind,
-                      w.strategy AS watch_strategy
+                      w.strategy AS watch_strategy, w.currency AS watch_currency
                FROM events e LEFT JOIN watches w ON w.id = e.watch_id
                ORDER BY e.id DESC LIMIT ?""",
             (limit,),

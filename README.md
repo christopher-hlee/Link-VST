@@ -572,6 +572,49 @@ Somewhere else being **tags**. Size on such a store is `size_M`, not
 `variant.title`, so every variant-reading size path matches zero items without
 erroring. `size_pref` is for manufacturer stores; `filter_json` is for these.
 
+### A star, not a grade
+
+The bottleneck was never finding listings — one filtered wishlist had seventy.
+It was evaluating them one at a time. So a listing that clears the cheap gates
+gets a **★** and a landed cost, and everything else stays quiet.
+
+`/star <id> colors=black,navy max=450 fx=142 condition=A`
+
+**Landed cost** is what the thing costs to have: sticker, converted, plus duty.
+De minimis was suspended in June 2026, so duty is not optional and the listed
+price is never what is paid. Shipping is free worldwide at any order size, so
+it drops out. The multiplier keys off the country-of-origin tag — Japan 1.16,
+China 1.30 — and the rate is **printed in the alert**, because an estimate
+whose assumptions are invisible is worse than none. A missing FX rate produces
+no number rather than a wrong one.
+
+The gates are tag-only and cheap, which is the point: they run on every
+listing and, in practice, eliminate most of them.
+
+- **colour** — a discount on something that will not be worn is waste, not
+  saving
+- **landed under your ceiling** — no price is not "under the ceiling"
+- **condition, read against the category** — the rank alone means nothing.
+  Seat and hem go first, so trousers want rank A where a shirt is fine at B;
+  fine knits pill where a shell only scuffs
+
+**What the star cannot see, and does not claim to.** The full method anchors
+every judgement to what the same money buys delivered to the US today: new
+retail, used comps, and whatever sale the brand is running this week. None of
+those are in a catalogue feed. So ★ means *this one survived the cheap gates
+and is worth pricing against US retail* — the step that is still yours. It
+will star things the full method would skip: it cannot see that a listing sits
+above its own new price, and it cannot see that you already own three knits.
+
+One rule it exists to obey: **never compare a RAGTAG price to another RAGTAG
+price.** The catalogue is internally consistent and externally mispriced —
+roughly a third of listings sit above US new — so a percentile against the
+store's own history would be a confident number measuring nothing.
+
+Material would sharpen the duty estimate by up to seventeen points, enough to
+flip marginal calls, but it lives in the product page's spec table rather than
+the feed. Today's estimate is the flat per-origin rate, and says so.
+
 ### Currency
 
 Per watch, defaulting to USD. A yen store read as dollars is wrong by a factor

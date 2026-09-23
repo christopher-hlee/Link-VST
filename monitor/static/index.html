@@ -108,6 +108,7 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .fired .tag{margin-left:9px;padding:1px 6px;border:1px solid var(--dim);color:var(--held);
   letter-spacing:.14em}
 .fired .tag.now{border-color:var(--accent);color:var(--accent)}
+.fired .star{color:var(--accent);letter-spacing:0}
 .fired .fp{font-family:var(--serif);font-size:15px;color:var(--muted)}
 .fired .ft{font-size:11px;color:var(--faint)}
 /* Detection lag. Amber past five minutes, because that is the point at which
@@ -187,7 +188,11 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
   .wait .n{overflow-wrap:anywhere}
   .wait .p,.wait .t{display:none}
   .fired{grid-template-columns:1fr 84px 44px;gap:8px 10px}
-  .fired .fp{display:none}
+  /* The price column used to be dropped entirely here. That is survivable for
+     a sticker price and not for a landed cost, which is the number the whole
+     decision turns on — and the phone is where these are actually read. Move
+     it under the title instead of hiding it. */
+  .fired .fp{grid-column:1;font-size:13px;color:var(--muted)}
   .fired .ft{grid-column:1;font-size:10px}
   .feed{grid-template-columns:auto 1fr 44px;gap:4px 12px}
   /* Ellipsis on a 430px column leaves "www.ninte…", which names nothing.
@@ -334,8 +339,14 @@ const every = w => {
   const n = (isArmed(w) ? w.hot_interval_s : w.base_interval_s) || 300;
   return n < 60 ? n + 's' : n < 3600 ? Math.round(n / 60) + 'm' : Math.round(n / 3600) + 'h';
 };
-const money = v => v == null ? '—' :
-  '$' + (Number(v) % 1 === 0 ? Number(v).toLocaleString() : Number(v).toFixed(2));
+const money = (v, cur) => v == null ? '—' :
+  symbolFor(cur) + (Number(v) % 1 === 0 ? Number(v).toLocaleString() : Number(v).toFixed(2));
+
+/* A yen store rendered with a dollar sign is wrong by a factor of about 142,
+   in the flattering direction. */
+const SYMBOLS = {USD: '$', JPY: '\u00a5', EUR: '\u20ac', GBP: '\u00a3',
+                 CAD: '$', AUD: '$'};
+const symbolFor = cur => SYMBOLS[(cur || 'USD').toUpperCase()] || ((cur || '') + ' ');
 
 const eyebrowFor = (state, extra) =>
   `<span class="state-eyebrow" style="color:${INK[state]}">${GLYPH[state] || ''}` +
@@ -383,7 +394,7 @@ function actRow(w) {
 
   const watched = (w.size_pref || '').toUpperCase();
   const back = realSizes(w).join(', ');
-  const bits = [money(w.last_price)];
+  const bits = [money(w.last_price, w.currency)];
   if (watched) bits.push('watching <b>' + esc(watched) + '</b>');
   if (back) bits.push(esc(back) + ' returned');
   bits.push('every ' + every(w) + (isArmed(w) ? ', armed' : ''));
@@ -426,7 +437,7 @@ function heldRow(w) {
         <span class="name sm" style="color:#c9c1b5">${esc(w.last_title || w.name)}</span>
         <span class="kicker" style="color:var(--muted)">${esc(w.brand || '')}</span>
       </div>
-      <span class="meta">${money(w.last_price)} · in stock in
+      <span class="meta">${money(w.last_price, w.currency)} · in stock in
         <b>${esc(back || 'another size')}</b> only · you watch <b>${esc(watched)}</b>
         · nothing sent, and nothing wrong</span>
     </div>
@@ -504,7 +515,7 @@ function waitRow(w) {
   return `<div class="wait">
     <span class="n"><span class="k">${esc(w.brand || '')}</span>${esc(shortName(w))}${size}</span>
     ${status}
-    <span class="p">${w.last_price != null ? money(w.last_price) : '—'}</span>
+    <span class="p">${w.last_price != null ? money(w.last_price, w.currency) : '—'}</span>
     <span class="t">${esc(ago(w.last_checked_at))} · ${esc(every(w))}</span>
     <span class="wa">
       <button class="btn-text" style="color:var(--dim)" onclick="edit(${w.id})">Edit</button>
@@ -571,7 +582,10 @@ function itemsOf(e) {
                 (base && !isAnnounce(e) ? base + '/products/' + h : '');
     const carts = (it.offers || []).filter(o => o.cart_url);
     return {handle: h, title: it.title || (p.titles || {})[h] || h,
-            price: it.price, url, cart: carts.length === 1 ? carts[0].cart_url : ''};
+            price: it.price, url, cart: carts.length === 1 ? carts[0].cart_url : '',
+            /* Carried through, not recomputed: the verdict was stored with the
+               event so that this page, the alert and the history agree. */
+            starred: it.starred, landed: it.landed};
   });
 }
 
@@ -614,13 +628,18 @@ function dropRow(it, e, announce) {
        new, the checkout just opened. */
     ? '<span class="tag now" title="Already listed; the store just made it buyable">now buyable</span>'
     : '';
+  /* A star is not a verdict: the cheap tag gates passed and it is worth
+     pricing against US retail, which nothing here can do. */
+  const star = it.starred ? '<span class="star" title="Clears your gates — worth pricing against US retail">★</span> ' : '';
+  const landed = it.landed != null
+    ? `<span class="caption"> ≈$${Number(it.landed).toLocaleString(undefined, {maximumFractionDigits: 0})} landed</span>` : '';
   return `<div class="fired">
     <span class="fi">
-      <span class="k">${esc(evName(e))}${tag}</span>
+      <span class="k">${star}${esc(evName(e))}${tag}</span>
       ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>`
                : esc(it.title)}
     </span>
-    <span class="fp">${it.price != null ? money(it.price) : ''}</span>
+    <span class="fp">${it.price != null ? money(it.price, e.watch_currency) : ''}${landed}</span>
     <span class="ft">${esc(ago(e.created_at))}${lagNote(e)}</span>
     ${act}
     <button class="x" title="Dismiss" aria-label="Dismiss ${esc(it.title)}"
@@ -638,7 +657,7 @@ function feedRow(e) {
   const p = e.payload || {};
   let note = p.title || '';
   if (e.kind === 'new_product') note = (p.handles || []).map(h => (p.titles || {})[h] || h).join(', ');
-  else if (e.kind === 'price_drop') note = `${money(p.old_price)} → ${money(p.new_price)}`;
+  else if (e.kind === 'price_drop') note = `${money(p.old_price, e.watch_currency)} → ${money(p.new_price, e.watch_currency)}`;
   else if (e.kind === 'watch_failing') note = p.error || '';
   const items = itemsOf(e);
   const href = (items[0] || {}).url || p.product_url || e.watch_url || '';

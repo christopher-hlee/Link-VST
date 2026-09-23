@@ -85,6 +85,7 @@ async def check_watch(watch: dict) -> bool:
         window_start=_sweep_window(watch),
         prev_availability=db.get_availability(watch),
         wanted=db.get_filter(watch),
+        currency=watch.get("currency") or "USD",
     )
 
     interval = next_interval(

@@ -152,7 +152,17 @@ def render(watch: dict, kind: str, payload: dict) -> str:
             entry = (payload.get("items") or {}).get(h) or {}
             amount = entry.get("price") or entry.get("list_price")
             name = _esc(titles.get(h) or h)
-            return f"· {name} — {_money(amount, mark)}" if amount else f"· {name}"
+            # A star is not a verdict. It means the cheap tag-only gates
+            # passed and this one is worth pricing against US retail — the
+            # step nothing here can do.
+            bullet = "⭐" if entry.get("starred") else "·"
+            text = f"{bullet} {name}"
+            if amount:
+                text += f" — {_money(amount, mark)}"
+            landed = entry.get("landed")
+            if landed is not None and (mark != "$" or landed != amount):
+                text += f" (≈${landed:,.0f} landed)"
+            return text
 
         arrival = payload.get("arrival") or "new"
         if arrival == "launched":
@@ -198,6 +208,12 @@ def render(watch: dict, kind: str, payload: dict) -> str:
             lines.append(line(h))
         if n > 10:
             lines.append(f"· …and {n - 10} more")
+        if any((payload.get("items") or {}).get(h, {}).get("starred")
+               for h in handles):
+            lines.append("")
+            lines.append("<i>⭐ clears your gates — worth pricing against "
+                         "US retail</i>")
+
         before = payload.get("baseline_count")
         if before is not None and arrival != "launched":
             # A launch does not grow the catalogue — the product was already

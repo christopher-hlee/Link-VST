@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from .filters import matches
+from .valuation import assess
 from .timeutil import parse, parse_instant, stamp, utcnow
 
 # Stock states. `error` is deliberately NOT one of them — see module docstring.
@@ -93,6 +94,7 @@ def decide(
     window_start=None,
     prev_availability: dict | None = None,
     wanted: dict | None = None,
+    currency: str = "USD",
 ) -> Decision:
     """Fold a check result into a new persisted state plus any events to fire."""
     if result.rate_limited:
@@ -126,7 +128,7 @@ def decide(
         return _decide_collection(prev_state, prev_baseline, result, events,
                                   window_start=window_start,
                                   prev_availability=prev_availability,
-                                  wanted=wanted)
+                                  wanted=wanted, currency=currency)
 
     return _decide_product(prev_state, prev_price, result, events)
 
@@ -185,7 +187,7 @@ def _decide_product(prev_state, prev_price, result, events) -> Decision:
 
 def _decide_collection(prev_state, prev_baseline, result, events,
                        window_start=None, prev_availability=None,
-                       wanted=None) -> Decision:
+                       wanted=None, currency="USD") -> Decision:
     handles = list(result.handles or [])
     items = (result.extra or {}).get("items") or {}
     now = utcnow()
@@ -226,7 +228,7 @@ def _decide_collection(prev_state, prev_baseline, result, events,
                  and matches(items.get(h) or {}, wanted)]
         if not fresh:
             continue
-        payload = {**_prune(_payload(result), fresh),
+        payload = {**_value(_prune(_payload(result), fresh), wanted, currency),
                    "handles": fresh,
                    "arrival": kind,
                    # What the catalogue held before this sweep, so the alert
@@ -256,7 +258,7 @@ def _decide_collection(prev_state, prev_baseline, result, events,
         # wording has to admit rather than claim a debut we cannot know about.
         debut = [h for h in launched
                  if not (prev_availability or {}).get(h, {}).get("ever_buyable")]
-        payload = {**_prune(_payload(result), launched),
+        payload = {**_value(_prune(_payload(result), launched), wanted, currency),
                    "handles": launched,
                    "arrival": ARRIVAL_LAUNCHED,
                    "first_sale": sorted(debut),
@@ -271,6 +273,27 @@ def _decide_collection(prev_state, prev_baseline, result, events,
                     availability=_fold_availability(prev_availability, items,
                                                     handles, alerted=launched,
                                                     now=now))
+
+
+def _value(payload: dict, wanted: dict | None, currency: str) -> dict:
+    """Attach landed cost and a star to each item the event carries.
+
+    Computed here rather than at render time so it lands in the stored event:
+    the dashboard, the alert and the history then agree, and a verdict can be
+    read back months later against the assumptions that produced it.
+    """
+    cfg = (wanted or {}).get("star")
+    items = payload.get("items")
+    if not cfg or not isinstance(items, dict):
+        return payload
+    for handle, item in items.items():
+        if not isinstance(item, dict):
+            continue
+        verdict = assess(item, cfg, currency=currency)
+        item["landed"] = verdict.landed
+        item["starred"] = verdict.starred
+        item["star_reason"] = verdict.reason
+    return payload
 
 
 def _worth_waking_someone_for(kind: str, item: dict) -> bool:

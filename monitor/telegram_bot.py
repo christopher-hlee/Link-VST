@@ -15,7 +15,7 @@ import json
 import logging
 import re
 
-from . import db, filters, strategies
+from . import db, filters, strategies, valuation
 from .config import PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from .fetcher import fetch, get_client
 from .timeutil import EPOCH
@@ -35,6 +35,7 @@ HELP = (
     "/add &lt;url&gt; — start watching it\n"
     "/filter &lt;id&gt; &lt;saved-search-url&gt; — narrow a watch\n"
     "/filter &lt;id&gt; off — widen it back\n"
+    "/star &lt;id&gt; colors=black,navy max=450 fx=142 — star good ones\n"
     "/help — this"
 )
 
@@ -208,6 +209,43 @@ async def _add(url: str) -> str:
     return "\n".join(reply)
 
 
+async def _star(rest: str) -> str:
+    """Set the cheap gates a listing must clear to earn a star."""
+    raw_id, _, arg = rest.strip().partition(" ")
+    arg = arg.strip()
+    if not raw_id.isdigit():
+        return ("Usage: <code>/star &lt;id&gt; colors=black,navy max=450 fx=142 "
+                "condition=A</code>  ·  <code>/star &lt;id&gt; off</code>")
+
+    watch = db.get_watch(int(raw_id))
+    if not watch:
+        return f"No watch {raw_id}. /status lists them."
+
+    spec = db.get_filter(watch) or {}
+    if arg.lower() in ("off", "none", "clear"):
+        spec.pop("star", None)
+        db.update_watch(watch["id"],
+                        filter_json=json.dumps(spec) if spec else None)
+        return f"<b>{_esc(watch['name'])}</b> — stars off."
+
+    cfg, unknown = valuation.parse_settings(arg)
+    if not cfg:
+        return ("Nothing I understood in that. Keys: colors, max, fx, "
+                "condition.")
+    spec["star"] = {**(spec.get("star") or {}), **cfg}
+    db.update_watch(watch["id"], filter_json=json.dumps(spec))
+
+    reply = [f"<b>{_esc(watch['name'])}</b>",
+             f"★ {_esc(valuation.describe_settings(spec['star']))}"]
+    if unknown:
+        reply.append(f"<i>ignored: {_esc(' '.join(unknown))}</i>")
+    if (watch.get("currency") or "USD").upper() != "USD" \
+            and not spec["star"].get("fx_per_usd"):
+        reply.append("<i>No fx rate set, so landed cost cannot be worked out "
+                     "— add <code>fx=142</code>.</i>")
+    return "\n".join(reply)
+
+
 async def _filter(rest: str) -> str:
     """Narrow an existing watch to a saved search, or widen it back."""
     raw_id, _, arg = rest.strip().partition(" ")
@@ -249,6 +287,8 @@ async def handle(text: str) -> str | None:
         return await _add(rest.strip())
     if command == "/filter":
         return await _filter(rest)
+    if command == "/star":
+        return await _star(rest)
     if command in ("/help", "/start"):
         return HELP
     return None
