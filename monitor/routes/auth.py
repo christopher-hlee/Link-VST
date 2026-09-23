@@ -48,7 +48,14 @@ def telegram_login(t: str = ""):
             "Send <code>/login</code> to the bot for a fresh one.</p>",
             status_code=401)
 
-    response = RedirectResponse("/", status_code=303)
+    # Land on a build-stamped URL, not bare "/".
+    #
+    # A cache entry stored before no-cache existed keeps being served without
+    # the server hearing about it — HTTP has no way to evict one. A URL that
+    # changes whenever the build does is a cache key that changes with it, so
+    # signing in from the chat always lands on the page that was just
+    # deployed rather than whatever the browser kept from last week.
+    response = RedirectResponse(f"/?b={_build()}", status_code=303)
     response.set_cookie(COOKIE_NAME, security.issue_session(), **SESSION_COOKIE)
     return response
 

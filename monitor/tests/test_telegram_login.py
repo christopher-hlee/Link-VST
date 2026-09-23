@@ -315,3 +315,14 @@ async def test_status_shows_the_id_and_the_filter_so_both_can_be_checked():
 
     assert f"<code>{wid}</code>" in reply
     assert "size_L or size_XL" in reply
+
+
+def test_signing_in_lands_on_a_build_stamped_url(client):
+    """A browser cannot be told to drop a page it already stored, so the way
+    in carries a cache key that changes with every deploy."""
+    from monitor.main import BUILD
+
+    token = security.issue_login_token()
+    r = client.get(f"/api/auth/telegram?t={token}", follow_redirects=False)
+
+    assert r.headers["location"] == f"/?b={BUILD}"
