@@ -41,19 +41,23 @@ def test_an_unchanged_page_costs_a_round_trip_not_the_document(client):
     assert again.content == b""
 
 
-def test_a_deployed_change_is_served_immediately(client):
+def test_a_deployed_change_is_served_immediately(client, tmp_path, monkeypatch):
     """The whole point. The tag is derived from the file, so writing a new
     page invalidates it without anyone remembering to bump a version."""
-    from monitor.main import STATIC
+    import monitor.main as main
+
+    # Against a COPY. Writing to the real page to prove a point about caching
+    # would risk leaving the served dashboard truncated if this process died
+    # mid-test — on the very server the deploy gate runs on.
+    staging = tmp_path / "static"
+    staging.mkdir()
+    page = staging / "index.html"
+    page.write_bytes((main.STATIC / "index.html").read_bytes())
+    monkeypatch.setattr(main, "STATIC", staging)
 
     stale = client.get("/").headers["etag"]
-    page = STATIC / "index.html"
-    original = page.read_bytes()
-    try:
-        page.write_bytes(original + b"\n<!-- deployed -->")
-        fresh = client.get("/", headers={"If-None-Match": stale})
-    finally:
-        page.write_bytes(original)
+    page.write_bytes(page.read_bytes() + b"\n<!-- deployed -->")
+    fresh = client.get("/", headers={"If-None-Match": stale})
 
     assert fresh.status_code == 200, "a changed page must not answer 304"
     assert fresh.headers["etag"] != stale
@@ -66,3 +70,11 @@ def test_health_names_the_commit_that_is_answering(client):
 
     assert body["build"]
     assert body["build"] != "unknown" or True   # unknown is fine off a checkout
+
+
+def test_me_reports_the_build_so_a_cached_page_can_say_so(client):
+    """A stale page tells you it is stale, instead of leaving "did the deploy
+    land?" to be argued about from a screenshot."""
+    body = client.get("/api/me").json()
+
+    assert "build" in body

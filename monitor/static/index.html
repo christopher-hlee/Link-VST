@@ -1163,6 +1163,19 @@ async function doLogin() {
 
 async function start() {
   const me = await api('/me');
+  /* The build, in the page. A stale cached page says so itself instead of
+     leaving "did the deploy land?" to be argued about from a screenshot. */
+  if (me.build) {
+    let mark = $('build');
+    if (!mark) {
+      mark = document.createElement('div');
+      mark.id = 'build';
+      mark.className = 'caption';
+      mark.style.cssText = 'padding:24px 0 8px;color:var(--dim);font-size:10px;letter-spacing:.14em';
+      document.querySelector('.body').appendChild(mark);
+    }
+    mark.textContent = 'BUILD ' + me.build;
+  }
   if (!me.auth_configured) {
     showLogin('Auth is not configured. Run `python -m monitor.hashpw` on the server.');
     return;

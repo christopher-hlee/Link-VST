@@ -59,6 +59,11 @@ def logout(response: Response):
     return {"ok": True}
 
 
+def _build() -> str:
+    from ..main import BUILD          # late: main imports this module
+    return BUILD
+
+
 @router.get("/me")
 def me(request: Request):
     return {
@@ -66,4 +71,8 @@ def me(request: Request):
         "auth_configured": security.configured(),
         "telegram_configured": telegram.configured(),
         "ntfy_configured": ntfy.configured(),
+        # Rendered in the footer. A cached page reports the build it was built
+        # from, so "which version am I looking at" is answerable from the
+        # screenshot rather than from guesswork about whether a deploy landed.
+        "build": _build(),
     }
