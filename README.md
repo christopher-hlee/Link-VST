@@ -622,6 +622,22 @@ working while being wrong, the worst failure available. So the filter is
 re-implemented on our side: `filters.parse_boost_url` turns the URL into
 predicates, and `filters.matches` evaluates them against each entry.
 
+Shops that do not run a facet service need the same thing said directly:
+
+```
+/filter <id> vendor=AURALEE,COMOLI tags=size_L,size_XL in_stock=yes
+```
+
+Each `tags=` is one OR group; repeat the key for an AND of ORs. A vendor
+filter over a shop's `/collections/sale` is the useful shape for a multi-brand
+stockist — *tell me when this brand is marked down here* rather than every
+arrival at full price.
+
+The search and the star settings share one column and must not overwrite each
+other: setting a filter used to replace the whole spec, so configuring stars
+and then narrowing a search silently undid the stars, and clearing the filter
+destroyed them for good. Each now writes only its own keys.
+
 Repeating one facet is an **or**; separate facets are an **and**.
 `pf_t_size=size_L&pf_t_size=size_XL` means L or XL, and flattening the facets
 into a single required-tags list would demand a garment be both, which nothing
@@ -654,6 +670,11 @@ It was evaluating them one at a time. So a listing that clears the cheap gates
 gets a **★** and a landed cost, and everything else stays quiet.
 
 `/star <id> colors=black,navy max=450 fx=142 condition=A`
+
+Stars are **off until configured** — a star with nothing behind it would mean
+nothing — so `/status` prints `★ off` for a watch that has none. A feature that
+requires setting up and gives no sign it is unset is indistinguishable from a
+broken one.
 
 **Landed cost** is what the thing costs to have: sticker, converted, plus duty.
 De minimis was suspended in June 2026, so duty is not optional and the listed

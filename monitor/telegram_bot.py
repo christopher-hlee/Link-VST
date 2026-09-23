@@ -34,7 +34,7 @@ HELP = (
     "/check &lt;url&gt; — what the monitor can see at that address\n"
     "/status — watches, and when each was last swept\n"
     "/add &lt;url&gt; — start watching it\n"
-    "/filter &lt;id&gt; &lt;saved-search-url&gt; — narrow a watch\n"
+    "/filter &lt;id&gt; vendor=AURALEE tags=size_L — narrow a watch\n"
     "/filter &lt;id&gt; off — widen it back\n"
     "/star &lt;id&gt; colors=black,navy max=450 fx=142 — star good ones\n"
     "/help — this"
@@ -177,9 +177,12 @@ async def _status() -> str:
         if live is not None and live != len(baseline):
             seen += f" · {live} live"
         line = f"<code>{w['id']}</code> {_esc(w['name'])} — {seen}"
-        spec = db.get_filter(w)
-        if spec:
+        spec = db.get_filter(w) or {}
+        if any(k in spec for k in filters.SEARCH_KEYS):
             line += f"\n    ↳ {_esc(filters.describe(spec))}"
+        # Printed even when off. A star that never appears because nothing was
+        # configured looks exactly like one that is broken.
+        line += f"\n    ★ {_esc(valuation.describe_settings(spec.get('star')))}"
         lines.append(line)
     return "\n".join(lines)
 
@@ -222,12 +225,14 @@ async def _star(rest: str) -> str:
     if not watch:
         return f"No watch {raw_id}. /status lists them."
 
-    spec = db.get_filter(watch) or {}
+    spec = dict(db.get_filter(watch) or {})
     if arg.lower() in ("off", "none", "clear"):
         spec.pop("star", None)
         db.update_watch(watch["id"],
                         filter_json=json.dumps(spec) if spec else None)
-        return f"<b>{_esc(watch['name'])}</b> — stars off."
+        kept = " Filter left as it was." if any(
+            k in spec for k in filters.SEARCH_KEYS) else ""
+        return f"<b>{_esc(watch['name'])}</b> — stars off.{kept}"
 
     cfg, unknown = valuation.parse_settings(arg)
     if not cfg:
@@ -247,32 +252,68 @@ async def _star(rest: str) -> str:
     return "\n".join(reply)
 
 
+def _save_filter(watch: dict, changes: dict | None) -> dict:
+    """Write the search predicates, leaving everything else in the spec alone.
+
+    The star settings live in the same column, and this used to replace the
+    whole thing — so narrowing a search silently destroyed the valuation
+    config, and clearing one destroyed it permanently. Two different questions
+    sharing a row is not a reason to let one answer overwrite the other.
+    """
+    spec = dict(db.get_filter(watch) or {})
+    for key in filters.SEARCH_KEYS:
+        spec.pop(key, None)
+    spec.update(changes or {})
+    db.update_watch(watch["id"], filter_json=json.dumps(spec) if spec else None)
+    return spec
+
+
 async def _filter(rest: str) -> str:
-    """Narrow an existing watch to a saved search, or widen it back."""
+    """Narrow an existing watch to a saved search, or widen it back.
+
+    Takes a storefront URL when the shop runs a facet service that puts the
+    search in one, and `key=value` otherwise — which is most shops.
+    """
     raw_id, _, arg = rest.strip().partition(" ")
     arg = arg.strip()
     if not raw_id.isdigit() or not arg:
-        return "Usage: /filter &lt;id&gt; &lt;saved-search-url&gt;  ·  /filter &lt;id&gt; off"
+        return ("Usage: <code>/filter &lt;id&gt; vendor=AURALEE,COMOLI "
+                "tags=size_L,size_XL in_stock=yes</code>\n"
+                "or paste a storefront URL with its facets on it\n"
+                "or <code>/filter &lt;id&gt; off</code>")
 
     watch = db.get_watch(int(raw_id))
     if not watch:
         return f"No watch {raw_id}. /status lists them."
 
     if arg.lower() in ("off", "none", "clear"):
-        db.update_watch(watch["id"], filter_json=None)
-        return f"<b>{_esc(watch['name'])}</b> — filter cleared."
+        spec = _save_filter(watch, None)
+        kept = " Stars left as they were." if spec.get("star") else ""
+        return f"<b>{_esc(watch['name'])}</b> — filter cleared.{kept}"
 
-    spec = filters.parse_boost_url(arg)
-    if not spec:
-        return ("No filter parameters in that URL. Paste the storefront "
-                "address with its facets still on it.")
-    db.update_watch(watch["id"], filter_json=json.dumps(spec))
+    unknown: list[str] = []
+    if arg.startswith(("http://", "https://")):
+        changes = filters.parse_boost_url(arg)
+        if not changes:
+            return ("No filter parameters in that URL. Paste the storefront "
+                    "address with its facets still on it, or use "
+                    "<code>vendor=…</code>.")
+    else:
+        changes, unknown = filters.parse_settings(arg)
+        if not changes:
+            return ("Nothing I understood in that. Keys: vendor, tags, "
+                    "in_stock, max.")
+
+    spec = _save_filter(watch, changes)
     # Deliberately does NOT rebaseline. The filter decides what is said, not
     # what has been seen, and replaying a catalogue already shown is what the
     # baseline exists to prevent.
-    return (f"<b>{_esc(watch['name'])}</b>\n"
-            f"↳ {_esc(filters.describe(spec))}\n"
-            "<i>Applies to what arrives from now on.</i>")
+    reply = [f"<b>{_esc(watch['name'])}</b>",
+             f"↳ {_esc(filters.describe(spec))}"]
+    if unknown:
+        reply.append(f"<i>ignored: {_esc(' '.join(unknown))}</i>")
+    reply.append("<i>Applies to what arrives from now on.</i>")
+    return "\n".join(reply)
 
 
 async def handle(text: str) -> str | None:

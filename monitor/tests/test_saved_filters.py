@@ -312,3 +312,110 @@ def test_narrowing_a_filter_does_not_replay_the_catalogue(client):
     assert json.loads(db.get_watch(wid)["baseline_json"]) == ["a", "b", "c"]
     assert json.loads(db.get_watch(wid)["filter_json"]) == {
         "tag_groups": [["size_XL"]]}
+
+
+# --- two settings, one column ----------------------------------------------
+
+@pytest.fixture
+def wid(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    db.init_db()
+    return db.create_watch(name="mohawk · sale", brand="mohawkgeneralstore.com",
+                           url="https://mohawkgeneralstore.com/collections/sale",
+                           strategy="shopify", kind="collection",
+                           target_ref="sale", last_state="watching")
+
+
+async def test_a_vendor_filter_can_be_set_without_a_url(wid):
+    """Most shops do not run a facet service, so most saved searches cannot be
+    expressed as a URL — and a vendor is the one nearly every multi-brand
+    store needs: "tell me when AURALEE is marked down here"."""
+    from monitor import telegram_bot
+
+    reply = await telegram_bot.handle(f"/filter {wid} vendor=AURALEE,COMOLI")
+
+    assert "AURALEE or COMOLI" in reply
+    assert db.get_filter(db.get_watch(wid))["vendors"] == ["AURALEE", "COMOLI"]
+
+
+async def test_setting_a_filter_does_not_destroy_the_star_settings(wid):
+    """They share a column. Narrowing a search used to replace the whole
+    thing, so configuring stars and then filtering silently undid the stars."""
+    from monitor import telegram_bot
+
+    await telegram_bot.handle(f"/star {wid} colors=black max=450 fx=142")
+    await telegram_bot.handle(f"/filter {wid} vendor=AURALEE")
+
+    spec = db.get_filter(db.get_watch(wid))
+    assert spec["vendors"] == ["AURALEE"]
+    assert spec["star"]["max_landed"] == 450.0, "stars survived the filter"
+
+
+async def test_clearing_the_filter_does_not_destroy_the_stars(wid):
+    from monitor import telegram_bot
+
+    await telegram_bot.handle(f"/star {wid} colors=black max=450 fx=142")
+    await telegram_bot.handle(f"/filter {wid} vendor=AURALEE")
+
+    reply = await telegram_bot.handle(f"/filter {wid} off")
+
+    spec = db.get_filter(db.get_watch(wid))
+    assert "vendors" not in spec
+    assert spec["star"]["max_landed"] == 450.0
+    assert "Stars left as they were" in reply
+
+
+async def test_clearing_the_stars_does_not_destroy_the_filter(wid):
+    from monitor import telegram_bot
+
+    await telegram_bot.handle(f"/filter {wid} vendor=AURALEE")
+    await telegram_bot.handle(f"/star {wid} max=450")
+
+    reply = await telegram_bot.handle(f"/star {wid} off")
+
+    spec = db.get_filter(db.get_watch(wid))
+    assert spec["vendors"] == ["AURALEE"]
+    assert "star" not in spec
+    assert "Filter left as it was" in reply
+
+
+async def test_a_new_search_replaces_the_old_one_rather_than_accumulating(wid):
+    """Otherwise narrowing twice leaves both, and the watch matches nothing."""
+    from monitor import telegram_bot
+
+    await telegram_bot.handle(f"/filter {wid} vendor=AURALEE tags=size_L")
+    await telegram_bot.handle(f"/filter {wid} vendor=COMOLI")
+
+    spec = db.get_filter(db.get_watch(wid))
+    assert spec["vendors"] == ["COMOLI"]
+    assert "tag_groups" not in spec, "the old group did not linger"
+
+
+async def test_status_says_whether_stars_are_on(wid):
+    """A star that never appears because nothing was configured looks exactly
+    like one that is broken."""
+    from monitor import telegram_bot
+
+    off = await telegram_bot._status()
+    assert "★ off" in off
+
+    await telegram_bot.handle(f"/star {wid} colors=black max=450 fx=142")
+    on = await telegram_bot._status()
+    assert "★ colours Black" in on
+
+
+async def test_a_vendor_filter_actually_filters(wid):
+    """End to end, on the shape these shops have: a sale collection carrying
+    many brands, one of which is wanted."""
+    from monitor import telegram_bot
+
+    await telegram_bot.handle(f"/filter {wid} vendor=AURALEE")
+    spec = db.get_filter(db.get_watch(wid))
+
+    auralee = item_of({**garment("a", vendor="AURALEE", tags=["size_L"]),
+                       "vendor": "AURALEE"})
+    other = item_of({**garment("b", vendor="Nanamica", tags=["size_L"]),
+                     "vendor": "Nanamica"})
+
+    assert matches(auralee, spec) is True
+    assert matches(other, spec) is False
