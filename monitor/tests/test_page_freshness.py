@@ -94,7 +94,9 @@ def test_rendering_the_page_can_be_done_without_polling_anyone(monkeypatch):
     assert scheduler._scheduler is None, "nothing was started"
 
 
-def test_the_switch_is_opt_in_so_the_service_still_polls(monkeypatch):
+async def test_the_switch_is_opt_in_so_the_service_still_polls(monkeypatch):
+    """Async, because APScheduler's AsyncIOScheduler needs a running loop —
+    production starts it inside the app's lifespan, where there is one."""
     from monitor import scheduler
 
     monkeypatch.delenv("MONITOR_NO_SCHEDULER", raising=False)
