@@ -24,6 +24,9 @@ jobs:
   layout:
     name: layout, in the code
     runs-on: ubuntu-latest
+    # A browser check that hangs would otherwise sit for six hours on the
+    # default timeout, which is indistinguishable from a slow queue.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,6 +51,7 @@ jobs:
   live:
     name: layout, as actually served
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       SITE: https://0iu6eih.cserverhost.cloud
     steps:

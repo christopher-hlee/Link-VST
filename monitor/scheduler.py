@@ -6,6 +6,7 @@ changing a watch's tier takes effect on the next tick with no job churn, and a
 restart resumes exactly where it left off.
 """
 import asyncio
+import os
 import json
 import logging
 import random
@@ -286,8 +287,20 @@ async def tick() -> None:
             await heartbeat.ok()
 
 
-def start() -> AsyncIOScheduler:
+def start() -> AsyncIOScheduler | None:
+    """Begin polling, unless this process exists only to render the page.
+
+    A layout check starts the whole app so the dashboard is real, and the
+    whole app polls stores. Run from CI on every push that meant a GitHub
+    runner making live requests to the shops this monitor watches — traffic
+    the owner did not ask for, from an address they cannot vouch for, against
+    hosts that rate-limit. A screenshot is not a reason to touch anyone's
+    server.
+    """
     global _scheduler
+    if os.environ.get("MONITOR_NO_SCHEDULER"):
+        log.info("scheduler disabled (MONITOR_NO_SCHEDULER)")
+        return None
     if _scheduler is not None:
         return _scheduler
     _scheduler = AsyncIOScheduler(timezone="UTC")

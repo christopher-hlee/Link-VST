@@ -78,3 +78,29 @@ def test_me_reports_the_build_so_a_cached_page_can_say_so(client):
     body = client.get("/api/me").json()
 
     assert "build" in body
+
+
+def test_rendering_the_page_can_be_done_without_polling_anyone(monkeypatch):
+    """A layout check starts the whole app so the dashboard is real, and the
+    whole app polls stores. Running that in CI meant a GitHub runner making
+    live requests to the shops this monitor watches, on every push. A
+    screenshot is not a reason to touch someone's server."""
+    from monitor import scheduler
+
+    monkeypatch.setenv("MONITOR_NO_SCHEDULER", "1")
+    monkeypatch.setattr(scheduler, "_scheduler", None)
+
+    assert scheduler.start() is None
+    assert scheduler._scheduler is None, "nothing was started"
+
+
+def test_the_switch_is_opt_in_so_the_service_still_polls(monkeypatch):
+    from monitor import scheduler
+
+    monkeypatch.delenv("MONITOR_NO_SCHEDULER", raising=False)
+    monkeypatch.setattr(scheduler, "_scheduler", None)
+    try:
+        assert scheduler.start() is not None
+    finally:
+        scheduler.shutdown()
+        scheduler._scheduler = None

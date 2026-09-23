@@ -17,8 +17,12 @@ test asserting "the text is present" would have called fine.
 import json, os, pathlib, subprocess, sys, tempfile, threading, time
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
+# No polling. Setting TICK_SECONDS high does not work — it is clamped to 8s
+# on purpose — so the scheduler has to be switched off outright, or rendering
+# a page means hitting the shops this monitor watches from whatever machine
+# happens to be running the check.
 os.environ.update(MONITOR_API_KEY="k", SESSION_SECRET="s" * 32,
-                  TICK_SECONDS="3600")
+                  MONITOR_NO_SCHEDULER="1")
 
 WIDTHS = [("iphone-se", 375), ("iphone", 393), ("phone-max", 430),
           ("tablet", 820), ("wide", 1280)]

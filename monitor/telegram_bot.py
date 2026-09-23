@@ -13,6 +13,7 @@ silence rather than "not authorised", which would confirm the bot is live.
 import asyncio
 import json
 import logging
+import os
 import re
 
 from . import db, filters, strategies, valuation
@@ -345,6 +346,8 @@ async def _loop() -> None:
 
 def start() -> None:
     global _task
+    if os.environ.get("MONITOR_NO_SCHEDULER"):
+        return          # same reason: a page render must not talk to anyone
     if _task is not None or not configured():
         return
     _task = asyncio.get_event_loop().create_task(_loop())
