@@ -268,9 +268,8 @@ async def _star_one(watch: dict, arg: str) -> str:
     elif (watch.get("currency") or "USD").upper() == "USD" \
             and spec["star"].get("fx_per_usd"):
         # The silent version of this is how yen prices got valued as dollars.
-        reply.append("<i>This watch is priced in USD, so fx= is not used. If "
-                     "the store charges in another currency it is detected on "
-                     "the next check, or set it under Edit on the dashboard.</i>")
+        reply.append("<i>This store's feed is priced in USD, so fx= is not "
+                     "needed and is not used.</i>")
     return "\n".join(reply)
 
 

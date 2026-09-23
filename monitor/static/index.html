@@ -3,7 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#100f0d">
+<meta name="theme-color" content="#100f0d" id="themeColor">
+<script>
+/* Before anything paints, so a light choice never flashes dark first. The
+   choice is per device, a convenience, and the page is fine without it. */
+try {
+  if (localStorage.getItem('restock-theme') === 'light') {
+    document.documentElement.dataset.theme = 'light';
+    document.querySelector('#themeColor').content = '#f6f2ea';
+  }
+} catch (e) {}
+</script>
 <title>Restock</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -19,6 +29,32 @@
   --serif:'Fraunces',Georgia,serif;
   --sans:'Work Sans',system-ui,-apple-system,sans-serif;
   --mono:ui-monospace,Menlo,Consolas,monospace;
+  --hatch-a:#191713; --hatch-b:#151310; --broken-a:#231715; --broken-b:#1b1412;
+  --wash-ok:rgba(127,209,164,.06); --wash-bad:rgba(224,113,107,.07);
+  --scrim:rgba(11,10,9,.93); --pressed:#151310; --chip-hover:#181410;
+  --warn-bg:#17140f; --warn-ink:#c9bfae; --field-edge:#2f2b25;
+  --ok-edge:#2f3b34; --bad-edge:#5c3230; --held-edge:#2b3630; --held-name:#c9c1b5;
+  --toast-bad:#f3d9d7; --toast-good:#d6f0e2;
+  color-scheme:dark;
+}
+/* Light: warm paper rather than white, and the same single accent. Every
+   text token clears 4.5:1 on the ground except --faint (3.3:1), which only
+   carries the least important words, as in the dark palette. */
+:root[data-theme="light"]{
+  --ground:#f6f2ea; --surface:#fffdf8; --surface-quiet:#efe9df; --surface-held:#eef3ee;
+  --rule:#d6ccbd; --border:#e0d8ca; --rule-faint:#e9e2d6;
+  --text:#2b2620; --bright:#15120e; --text-dim:#4f473d;
+  --muted:#6f665a; --dim:#776d5e; --faint:#8f8574;
+  --accent:#a4522a; --accent-hover:#8f4622; --accent-ink:#fffaf3;
+  --in-stock:#1d7349; --failing:#b3372f; --armed:#98590c;
+  --no-baseline:#2d64a0; --held:#6b6256;
+  --hatch-a:#ebe4d8; --hatch-b:#f1ebe1; --broken-a:#f5dfdb; --broken-b:#f9ebe8;
+  --wash-ok:rgba(29,115,73,.07); --wash-bad:rgba(179,55,47,.07);
+  --scrim:rgba(40,34,27,.45); --pressed:#ece5d9; --chip-hover:#efe7dc;
+  --warn-bg:#f8eedc; --warn-ink:#4f473d; --field-edge:#d6ccbd;
+  --ok-edge:#b9d3c3; --bad-edge:#e2b3ad; --held-edge:#c9d6cc; --held-name:#3a342c;
+  --toast-bad:#7a2520; --toast-good:#155a38;
+  color-scheme:light;
 }
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--text);font-family:var(--sans);
@@ -53,6 +89,10 @@ a{color:var(--accent)} a:hover{color:var(--accent-hover)}
 .stat.bad b{color:var(--failing)}
 .stat.zero b{color:var(--faint)}
 .dock{display:none}
+/* Light/dark switch: a square icon button beside the other actions. */
+.btn-ghost.theme{width:44px;min-height:44px;padding:0;display:inline-flex;
+  align-items:center;justify-content:center;flex:none}
+.theme svg{display:block}
 
 .btn-ghost{background:none;border:1px solid var(--rule);color:var(--text);font-size:11px;
   letter-spacing:.14em;text-transform:uppercase;padding:12px 18px;transition:border-color .1s,color .1s}
@@ -70,9 +110,9 @@ a.btn-text{display:inline-flex;align-items:center;text-decoration:none}
 .body{padding:0 44px 40px;display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:104px 1fr 300px;gap:28px;align-items:center;
   padding:24px 0;border-bottom:1px solid var(--border)}
-.row.act{background:linear-gradient(90deg,rgba(127,209,164,.06),transparent 42%)}
-.row.broken{background:linear-gradient(90deg,rgba(224,113,107,.07),transparent 42%)}
-.shot{height:124px;background:repeating-linear-gradient(135deg,#191713 0 8px,#151310 8px 16px);
+.row.act{background:linear-gradient(90deg,var(--wash-ok),transparent 42%)}
+.row.broken{background:linear-gradient(90deg,var(--wash-bad),transparent 42%)}
+.shot{height:124px;background:repeating-linear-gradient(135deg,var(--hatch-a) 0 8px,var(--hatch-b) 8px 16px);
   display:flex;align-items:flex-end;padding:7px;background-size:cover;background-position:center}
 .shot span{font-family:var(--mono);font-size:9px;color:var(--dim)}
 .shot.sm{height:96px}
@@ -89,7 +129,7 @@ a.btn-text{display:inline-flex;align-items:center;text-decoration:none}
 .chip{flex:1;background:none;border:1px solid var(--dim);padding:15px 0;
   font-family:var(--serif);font-size:17px;color:var(--bright);min-height:48px;
   transition:border-color .1s,background .1s}
-.chip:hover{border-color:var(--accent);background:#181410}
+.chip:hover{border-color:var(--accent);background:var(--chip-hover)}
 .chip.primary{flex:1.5;background:var(--accent);border:none;font-size:19px;color:var(--accent-ink)}
 .chip.primary:hover{background:var(--accent-hover)}
 .caption{font-size:11px;color:var(--dim);text-align:right}
@@ -167,7 +207,7 @@ a.btn-text{display:inline-flex;align-items:center;text-decoration:none}
 
 /* A product photo, or the hatch every empty image slot already uses. */
 .tn{display:block;position:relative;overflow:hidden;flex:none;
-  background:repeating-linear-gradient(135deg,#191713 0 6px,#151310 6px 12px)}
+  background:repeating-linear-gradient(135deg,var(--hatch-a) 0 6px,var(--hatch-b) 6px 12px)}
 .tn img{display:block;width:100%;height:100%;object-fit:cover}
 /* Up to three photos fanned like a hand of cards: the newest on top, the
    others showing an edge. Enough to recognise a drop without opening it. */
@@ -213,11 +253,11 @@ a.item-title:hover{color:var(--accent)}
 .feed a{text-decoration:none}
 
 .empty{color:var(--dim);font-size:13px;padding:40px 0;border-top:1px solid var(--border)}
-.warn{background:#17140f;border-left:2px solid var(--armed);padding:12px 14px;
-  font-size:12px;color:#c9bfae;margin:16px 0}
+.warn{background:var(--warn-bg);border-left:2px solid var(--armed);padding:12px 14px;
+  font-size:12px;color:var(--warn-ink);margin:16px 0}
 .warn b{color:var(--bright);font-weight:600}
 
-.overlay{position:fixed;inset:0;background:rgba(11,10,9,.93);z-index:100;
+.overlay{position:fixed;inset:0;background:var(--scrim);z-index:100;
   display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
 .sheet{background:var(--ground);border:1px solid var(--rule);width:100%;max-width:780px;
   padding:34px 40px 32px}
@@ -227,21 +267,21 @@ a.item-title:hover{color:var(--accent)}
   padding:20px 0;border:0;border-top:1px solid var(--border);background:none;
   width:100%;text-align:left;color:inherit}
 .intent:hover{background:var(--surface-quiet)}
-.intent[aria-pressed="true"]{background:#151310;border-left:2px solid var(--accent);
+.intent[aria-pressed="true"]{background:var(--pressed);border-left:2px solid var(--accent);
   padding:20px 16px 20px 14px}
 .intent .q{font-family:var(--serif);font-size:20px;color:var(--bright)}
 .intent .ex{font-size:12px;color:var(--muted)}
 .field{display:flex;flex-direction:column;gap:8px;margin-top:22px}
 .field label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);
   display:flex;justify-content:space-between;gap:12px}
-.field input{background:var(--surface);border:1px solid #2f2b25;color:var(--text);
+.field input{background:var(--surface);border:1px solid var(--field-edge);color:var(--text);
   font-family:var(--mono);font-size:14px;padding:13px 14px;width:100%}
 .field input:focus{outline:none;border-color:var(--accent)}
-.detect{background:var(--surface-held);border:1px solid #2f3b34;padding:14px 16px;
+.detect{background:var(--surface-held);border:1px solid var(--ok-edge);padding:14px 16px;
   font-size:13px;color:var(--bright);margin-top:14px}
 .detect .l2{font-size:12px;color:var(--held);margin-top:5px}
-.detect.bad{border-color:#5c3230;color:var(--failing)}
-.seg{display:flex;border:1px solid #2f2b25}
+.detect.bad{border-color:var(--bad-edge);color:var(--failing)}
+.seg{display:flex;border:1px solid var(--field-edge)}
 .seg button{flex:1;background:none;border:none;color:var(--muted);font-size:11px;
   letter-spacing:.14em;text-transform:uppercase;padding:13px 0}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
@@ -251,8 +291,8 @@ a.item-title:hover{color:var(--accent)}
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:200;
   background:var(--surface);border:1px solid var(--dim);padding:13px 20px;font-size:13px;max-width:90vw}
-.toast.bad{border-color:var(--failing);color:#f3d9d7}
-.toast.good{border-color:var(--in-stock);color:#d6f0e2}
+.toast.bad{border-color:var(--failing);color:var(--toast-bad)}
+.toast.good{border-color:var(--in-stock);color:var(--toast-good)}
 
 @media (max-width:1100px){
   .row{grid-template-columns:80px 1fr 240px;gap:20px}
@@ -293,9 +333,10 @@ a.item-title:hover{color:var(--accent)}
   .dock{display:flex;gap:10px;position:fixed;left:0;right:0;bottom:0;z-index:50;
     padding:10px max(16px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
     background:var(--ground);border-top:1px solid var(--border)}
-  .dock button{min-height:48px;padding:0 12px}
+  .dock button{min-height:48px;padding:0 10px;letter-spacing:.1em;white-space:nowrap}
   .dock .btn-ghost{flex:1}
-  .dock .btn-accent{flex:1.3}
+  .dock .btn-accent{flex:1.1}
+  .dock .btn-ghost.theme{flex:none;width:48px;padding:0}
   .toast{bottom:calc(88px + env(safe-area-inset-bottom));width:calc(100% - 32px);max-width:none}
 
   .bucket{grid-template-columns:78px minmax(0,1fr) 16px;gap:14px;padding:14px 0}
@@ -405,6 +446,7 @@ body.locked{overflow:hidden}
     <div class="hdr-side">
       <div class="counts" id="counts"></div>
       <div class="hdr-actions">
+        <button class="btn-ghost theme" onclick="toggleTheme()"></button>
         <button class="btn-ghost" onclick="openInspect()">Why no alert?</button>
         <button class="btn-ghost" onclick="openAdd()">Add a watch</button>
       </div>
@@ -417,6 +459,7 @@ body.locked{overflow:hidden}
   <!-- The phone's two primary actions, where a thumb already is. On a wide
        screen they live in the header instead and this is not rendered. -->
   <nav class="dock" aria-label="Actions">
+    <button class="btn-ghost theme" onclick="toggleTheme()"></button>
     <button class="btn-ghost" onclick="openInspect()">Why no alert?</button>
     <button class="btn-accent" onclick="openAdd()">Add a watch</button>
   </nav>
@@ -426,6 +469,28 @@ body.locked{overflow:hidden}
 
 <script>
 const $ = id => document.getElementById(id);
+
+/* ---------- light / dark ---------- */
+const SUN = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>';
+const MOON = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z"/></svg>';
+const isLight = () => document.documentElement.dataset.theme === 'light';
+/* The icon shows where a tap takes you: a sun in the dark, a moon in the light. */
+function paintThemeButtons() {
+  const next = isLight() ? 'dark' : 'light';
+  document.querySelectorAll('.theme').forEach(b => {
+    b.innerHTML = isLight() ? MOON : SUN;
+    b.setAttribute('aria-label', `Switch to ${next} mode`);
+    b.title = `Switch to ${next} mode`;
+  });
+  $('themeColor').content = isLight() ? '#f6f2ea' : '#100f0d';
+}
+function toggleTheme() {
+  if (isLight()) delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = 'light';
+  try { localStorage.setItem('restock-theme', isLight() ? 'light' : 'dark'); } catch (e) {}
+  paintThemeButtons();
+}
+paintThemeButtons();
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let WATCHES = [], EVENTS = [], BUCKETS = [], TIMER = null, INTENT = 'restock';
@@ -611,11 +676,11 @@ function heldRow(w) {
   const first = back ? back.split(',')[0].trim() : '';
   const watched = (w.size_pref || '').toUpperCase();
   return `<div class="row">
-    ${shot(w, 'sm', '#2b3630')}
+    ${shot(w, 'sm', 'var(--held-edge)')}
     <div style="display:flex;flex-direction:column;gap:7px">
       ${eyebrowFor('held', 'not your size · ' + ago(w.last_checked_at))}
       <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
-        <span class="name sm" style="color:#c9c1b5">${esc(w.last_title || w.name)}</span>
+        <span class="name sm" style="color:var(--held-name)">${esc(w.last_title || w.name)}</span>
         <span class="kicker" style="color:var(--muted)">${esc(w.brand || '')}</span>
       </div>
       <span class="meta">${money(w.last_price, w.currency)} · in stock in
@@ -642,8 +707,8 @@ function brokenRow(w) {
     : ' · this watch has never returned a reading';
   const n = w.consecutive_failures || 0;
   return `<div class="row broken">
-    <div class="shot sm" style="border:1px solid #5c3230;
-      background:repeating-linear-gradient(135deg,#231715 0 8px,#1b1412 8px 16px)"></div>
+    <div class="shot sm" style="border:1px solid var(--bad-edge);
+      background:repeating-linear-gradient(135deg,var(--broken-a) 0 8px,var(--broken-b) 8px 16px)"></div>
     <div style="display:flex;flex-direction:column;gap:7px">
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
         ${eyebrowFor('failing', 'stale state')}
@@ -1205,12 +1270,6 @@ async function edit(id) {
         label it <b>held, not your size</b> rather than going quiet unexplained.</div>
     </div>`}
 
-    ${w.strategy === 'shopify' ? `<div class="field">
-      <label>Prices in <span style="color:var(--dim)">found from the store; change only if wrong</span></label>
-      <div class="seg" id="eCur">${[...new Set([...Object.keys(SYMBOLS), (w.currency || 'USD').toUpperCase()])]
-        .map(c => `<button aria-pressed="${c === (w.currency || 'USD').toUpperCase()}" data-cur="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-    </div>` : ''}
-
     <div class="field">
       <label>How often</label>
       <div class="seg" id="eSeg">
@@ -1248,12 +1307,8 @@ async function edit(id) {
   };
   $('eUrl').addEventListener('input', flag);
   if (feedWatch) $('eKw').addEventListener('input', flag);
-  for (const id of ['eSeg', 'eCur']) {
-    if (!$(id)) continue;
-    [...$(id).children].forEach(b => b.onclick = () =>
-      [...$(id).children].forEach(x => x.setAttribute('aria-pressed', x === b)));
-  }
-  $('eSave').dataset.cur = (w.currency || 'USD').toUpperCase();
+  [...$('eSeg').children].forEach(b => b.onclick = () =>
+    [...$('eSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b)));
 }
 
 async function saveEdit(id) {
@@ -1265,11 +1320,6 @@ async function saveEdit(id) {
   };
   if ($('eKw')) body.target_ref = $('eKw').value.trim();
   if ($('eSize')) body.size_pref = $('eSize').value.trim() || null;
-  /* Sent only when changed. A currency sent at all is recorded as the
-     person's choice and switches off detection for good, so re-saving a
-     name must not quietly pin whatever the default happened to be. */
-  const cur = $('eCur') && [...$('eCur').children].find(b => b.getAttribute('aria-pressed') === 'true');
-  if (cur && cur.dataset.cur !== $('eSave').dataset.cur) body.currency = cur.dataset.cur;
 
   $('eSave').disabled = true;
   try {
@@ -1480,7 +1530,7 @@ function pickIntent(id) {
 async function detect() {
   const url = $('aUrl').value.trim();
   if (!url) return;
-  $('detect').innerHTML = '<div class="detect" style="color:var(--held);border-color:#2f2b25">Identifying…</div>';
+  $('detect').innerHTML = '<div class="detect" style="color:var(--held);border-color:var(--field-edge)">Identifying…</div>';
   try {
     const d = await api('/detect', {method: 'POST', body: JSON.stringify({url})});
     const vs = d.variants || [];

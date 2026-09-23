@@ -156,10 +156,34 @@ def _migrate(conn) -> None:
                  "WHERE last_sweep_at IS NULL AND last_checked_at IS NOT NULL")
 
 
+def revert_detected_currencies(conn) -> int:
+    """Put back to USD every watch the currency detector switched.
+
+    The detector read a shop's base currency from /meta.json and trusted it.
+    But products.json prices in the currency the shop presents to the
+    visitor, and this server is in the US: RAGTAG's base is JPY, its feed says
+    575 for a pair of trousers the site sells at $575.00, and the alert printed
+    ¥575. Only watches whose currency came from the detector are touched; its
+    records are then deleted so this does nothing on the next boot.
+    """
+    rows = conn.execute(
+        "SELECT key, value FROM kv WHERE key LIKE 'currency_probe:%'").fetchall()
+    fixed = 0
+    for row in rows:
+        code = row["value"] or ""
+        if len(code) == 3 and code.isalpha() and code.isupper():
+            fixed += conn.execute(
+                "UPDATE watches SET currency='USD' WHERE id=? AND currency=?",
+                (row["key"].split(":", 1)[1], code)).rowcount
+    conn.execute("DELETE FROM kv WHERE key LIKE 'currency_probe:%'")
+    return fixed
+
+
 def init_db() -> None:
     with tx() as conn:
         conn.executescript(SCHEMA)
         _migrate(conn)
+        revert_detected_currencies(conn)
 
 
 # ---------------------------------------------------------------- watches

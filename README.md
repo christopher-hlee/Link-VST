@@ -49,6 +49,14 @@ laptop, and an item cleared on one has to be gone on the other. **Clear all**
 in a sheet empties that watch's bucket; anything still listed above is not
 repeated in **Recent alerts**, which holds the rest of the history.
 
+### Light and dark
+
+A sun/moon button switches themes: in the bottom dock on a phone, beside
+**Add a watch** on a wide screen. The choice is remembered per device and
+applied before the page paints, so a light choice never flashes dark. Every
+colour in the page is a token with a light value, and `ui-check.py` switches
+each width to light and fails on any text under 4.5:1 contrast.
+
 ### On a phone
 
 The phone gets its own layout rather than the desktop one squeezed:
@@ -760,17 +768,12 @@ of about 142, in the flattering direction. There is no FX conversion: the
 alert prints ¥49,160 because that is what the store charges, and inventing a
 dollar figure would mean carrying a rate that goes stale silently.
 
-**Learned from the store, not assumed.** Every watch used to default to USD
-and nothing a person could reach — not the dashboard, not `/add` — set
-anything else. So a RAGTAG watch showed ¥49,160 as $49,160, and with stars
-configured the fx rate was ignored and the landed cost came out near $59,000:
-no star could ever clear a $450 ceiling. Now each Shopify watch asks its store
-once, via `/meta.json`, which states the currency `products.json` is priced
-in. It asks before the first sweep, records the answer so a restart does not
-ask again, and retries a day later if the store could not be reached.
-
-The Edit sheet has a **Prices in** choice for when detection is wrong or the
-store will not say. A currency picked there is final: detection never
-overrides it. `/star` says so when it is handed an `fx=` rate for a watch
-priced in dollars, instead of quietly not using it.
+**Shown in dollars, because the feed is in dollars.** A detector briefly
+asked each store for its currency through `/meta.json` and trusted it. That
+field is the shop's *base* currency, while `products.json` prices in the
+currency the shop presents to the visitor — and this server is in the US.
+RAGTAG's base is JPY; its feed says 575 for trousers the site sells at
+$575.00, and the alert went out as "¥575". The detector is gone, and every
+watch it switched is put back to USD at startup. Stars compare the same
+dollar figures, so `fx=` is not needed for these stores.
 

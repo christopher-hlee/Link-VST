@@ -51,7 +51,7 @@ def seed():
         name="ragtag-global.com · yohjiyamamotopourhomme",
         brand="ragtag-global.com", strategy="shopify", kind="collection",
         url="https://ragtag-global.com/collections/yohjiyamamotopourhomme",
-        target_ref="yohjiyamamotopourhomme", currency="JPY",
+        target_ref="yohjiyamamotopourhomme",
         last_state="watching", last_checked_at=stamp(),
         baseline_json=json.dumps([f"p{i}" for i in range(403)]))
     wid = db.create_watch(
@@ -61,10 +61,11 @@ def seed():
         last_checked_at=stamp(), last_seen_count=733,
         baseline_json=json.dumps([f"s{i}" for i in range(739)]))
     # RAGTAG: consignment items going on sale a few at a time, several per
-    # sweep, in yen, some starred. Twelve, so the sheet has to scroll.
+    # sweep, some starred. Twelve, so the sheet has to scroll. The feed is
+    # priced in dollars, as RAGTAG's actually is when read from a US server.
     ragtag = db.create_watch(
         name="ragtag-global.com · comoli", brand="ragtag-global.com",
-        strategy="shopify", kind="collection", currency="JPY",
+        strategy="shopify", kind="collection",
         url="https://ragtag-global.com/collections/comoli",
         last_state="watching", last_checked_at=stamp(),
         baseline_json=json.dumps([f"c{i}" for i in range(182)]))
@@ -77,7 +78,7 @@ def seed():
             items[h] = {
                 "title": ("COMOLI Tielocken Coat Wool Gabardine Navy Size 2 "
                           "— Excellent Condition (A)") if i == 1 else f"COMOLI Shirt Jacket {i}",
-                "price": 49160 + i * 1000, "available": True,
+                "price": 575.0 + i * 10, "available": True,
                 "available_stated": True,
                 "image": None if i == 5 else f"https://img.test/c{i}.jpg",
                 "url": f"https://ragtag-global.com/products/{h}",
@@ -392,25 +393,59 @@ def main() -> int:
             no_junk("#add")
             page.keyboard.press("Escape")
 
-            # ---- the edit sheet shows the currency the watch prices in
-            page.locator(".wait", has_text="comoli").locator("text=Edit").click()
-            page.wait_for_timeout(300)
-            chosen = page.eval_on_selector_all(
-                "#eCur button[aria-pressed=true]", "els => els.map(e => e.textContent)")
-            if chosen != ["JPY"]:
-                fail(f"the RAGTAG watch's currency shows as {chosen}, not JPY")
-            wide = page.evaluate("(() => { const s = document.querySelector('#add .sheet');"
-                                 " return s.scrollWidth - s.clientWidth; })()")
-            if wide > 0:
-                fail(f"the edit sheet scrolls sideways by {wide}px")
-            if phone:
-                for h in page.eval_on_selector_all(
-                        "#eCur button",
-                        "els => els.map(e => Math.round(e.getBoundingClientRect().height))"):
-                    if h < MIN_TAP:
-                        fail(f"a currency button is {h}px tall, under {MIN_TAP}px")
-            no_junk("#add")
-            page.keyboard.press("Escape")
+
+            # ---- light / dark: reachable, working, legible, remembered
+            toggle = page.locator(".dock .theme" if phone else ".hdr-actions .theme")
+            if not toggle.is_visible():
+                fail("the light/dark button is not on screen")
+            else:
+                box = toggle.bounding_box()
+                if min(box["width"], box["height"]) < MIN_TAP:
+                    fail(f"the light/dark button is {min(box['width'], box['height']):.0f}px")
+                cramped = page.eval_on_selector_all(
+                    ".dock button", "els => els.filter(e => e.offsetParent &&"
+                    " e.scrollWidth > e.clientWidth + 1).map(e => e.textContent.trim())")
+                if cramped:
+                    fail(f"dock labels do not fit: {cramped}")
+                toggle.click()
+                page.wait_for_timeout(200)
+                theme = page.evaluate("document.documentElement.dataset.theme || 'dark'")
+                ground = page.evaluate("getComputedStyle(document.body).backgroundColor")
+                if theme != "light" or ground == "rgb(16, 15, 13)":
+                    fail(f"the toggle did not switch to light ({theme}, {ground})")
+                # Every text a person reads against the page must stay legible.
+                weak = page.evaluate("""() => {
+                    const lum = c => { const [r,g,b] = c.match(/\\d+(\\.\\d+)?/g).slice(0,3).map(Number)
+                        .map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+                        return .2126*r + .7152*g + .0722*b; };
+                    const bg = lum(getComputedStyle(document.body).backgroundColor);
+                    const out = [];
+                    for (const sel of ['.hdr h1', '.stat span', '.group-label', '.bk-name',
+                                       '.bk-meta', '.wait .n', '.wait .s', '.meta', '.name']) {
+                        const e = document.querySelector(sel);
+                        if (!e) continue;
+                        const f = lum(getComputedStyle(e).color);
+                        const ratio = (Math.max(f, bg) + .05) / (Math.min(f, bg) + .05);
+                        if (ratio < 4.5) out.push(sel + ' ' + ratio.toFixed(1));
+                    }
+                    return out;
+                }""")
+                for w in weak:
+                    fail(f"light mode text under 4.5:1 contrast: {w}")
+                overflow = page.evaluate("document.documentElement.scrollWidth"
+                                         " - document.documentElement.clientWidth")
+                if overflow > 0:
+                    fail(f"light mode scrolls sideways by {overflow}px")
+                no_junk("body")
+                page.screenshot(path=f"/tmp/ui-{label}-light.png", full_page=True)
+                page.reload()
+                page.wait_for_timeout(1200)
+                if page.evaluate("document.documentElement.dataset.theme") != "light":
+                    fail("the light choice was forgotten on reload")
+                page.locator(".dock .theme" if phone else ".hdr-actions .theme").click()
+                page.wait_for_timeout(150)
+                if page.evaluate("document.documentElement.dataset.theme"):
+                    fail("the toggle did not switch back to dark")
 
             checked += 1
             print(f"  {label:10} {width:>5}px  ok" if not failures
