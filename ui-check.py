@@ -20,7 +20,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 os.environ.update(MONITOR_API_KEY="k", SESSION_SECRET="s" * 32,
                   TICK_SECONDS="3600")
 
-WIDTHS = [("iphone-se", 375), ("phone", 430), ("tablet", 820), ("wide", 1280)]
+WIDTHS = [("iphone-se", 375), ("iphone", 393), ("phone-max", 430),
+          ("tablet", 820), ("wide", 1280)]
 MAX_ROW_HEIGHT = 200       # a row taller than this is wrapping pathologically
 MIN_TAP = 44               # px, the smallest comfortable target
 

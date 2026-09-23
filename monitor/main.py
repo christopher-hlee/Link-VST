@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from . import db, scheduler, security, telegram_bot
 from .config import API_KEY, COOKIE_NAME
@@ -23,6 +23,25 @@ logging.basicConfig(
 log = logging.getLogger("monitor")
 
 VERSION = "0.1.0"
+
+
+def _build() -> str:
+    """The deployed commit, read once at import.
+
+    Read from git rather than written in by the deploy script, so it cannot
+    drift from what is actually checked out.
+    """
+    import subprocess
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent.parent, capture_output=True,
+            text=True, timeout=5).stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+BUILD = _build()
 STATIC = Path(__file__).parent / "static"
 
 
@@ -112,12 +131,31 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.get("/health")
 def health():
     """Unauthenticated so Caddy and uptime checks can reach it."""
-    return {"status": "ok", "service": "restock-monitor", "version": VERSION}
+    return {"status": "ok", "service": "restock-monitor", "version": VERSION,
+            # Which commit is actually answering. "Is my fix live?" should not
+            # require reading a stylesheet through a screenshot.
+            "build": BUILD}
 
 
 @app.get("/")
-def index():
-    return FileResponse(STATIC / "index.html")
+def index(request: Request):
+    """The dashboard, always the current one.
+
+    no-cache, not no-store: the browser must revalidate every time, but an
+    unchanged page answers 304 with no body — a round trip rather than 58KB
+    over cellular. Without any Cache-Control at all a browser applies
+    heuristic caching, which is how a layout fix that was live on the server
+    stayed invisible on the phone that reported the bug.
+    """
+    page = STATIC / "index.html"
+    stat = page.stat()
+    etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+
+    if etag in [t.strip() for t in
+                request.headers.get("if-none-match", "").split(",")]:
+        return Response(status_code=304, headers=headers)
+    return FileResponse(page, headers=headers)
 
 
 app.include_router(auth.router,    prefix="/api")

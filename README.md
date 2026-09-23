@@ -480,6 +480,22 @@ nothing succeeded trips the same alarm as a crash.
 Playwright for JS-rendered sites. Auto-checkout is deliberately out of scope:
 this notifies, it doesn't buy.
 
+## The page a browser shows must be the one the server has
+
+A layout fix was deployed, verified in a browser, and reported still broken
+from a phone. It was: the dashboard went out with **no `Cache-Control` at
+all**, which leaves a browser free to apply heuristic caching and keep a stale
+copy for as long as it likes. The screenshot settled it — the status still sat
+on the same line as the name, a layout already replaced on the server.
+
+The page is now `no-cache` with an ETag derived from the file itself, so a
+browser revalidates every load, an unchanged page answers **304 with no body**
+(a round trip, not 58KB over cellular), and a deploy invalidates it without
+anyone remembering to bump a version.
+
+`GET /health` reports the commit answering, so *"is my fix live?"* has an
+answer that does not involve reading a stylesheet through a screenshot.
+
 ## Checking the layout
 
 ```
